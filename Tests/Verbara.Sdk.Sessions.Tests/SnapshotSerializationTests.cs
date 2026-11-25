@@ -47,6 +47,8 @@ public class SnapshotSerializationTests
         session.Transition(CallSessionState.Dialing);
         session.Transition(CallSessionState.Ringing);
         session.Transition(CallSessionState.Connected);
+        // The manager sets the connected time when it announces the connection; a bare transition does not.
+        session.ConnectedAt = session.CreatedAt.AddSeconds(5);
         session.StartHold();
         session.Transition(CallSessionState.OnHold);
 
@@ -150,6 +152,27 @@ public class SnapshotSerializationTests
         reconstructed.Participants.Should().HaveCount(1);
         reconstructed.Events.Should().HaveCount(1);
         reconstructed.Metadata.Should().ContainKey("campaign");
+    }
+
+    [Fact]
+    public void ToSession_ShouldRestoreACallThatWasConnected_WhenTheSnapshotIsConnectedWithNoConnectedTime()
+    {
+        // A call a reload opened connected is saved connected with no connected time of its own.
+        var saved = new CallSession("sess-002", "linked-002", "server-1", CallDirection.Inbound)
+        {
+            CreatedAt = new DateTimeOffset(2026, 3, 17, 10, 0, 0, TimeSpan.Zero),
+        };
+        saved.State = CallSessionState.Connected;
+
+        var restored = CallSessionSnapshot.FromSession(saved).ToSession();
+        var joined = restored.TryTransition(CallSessionState.Queued);
+
+        (DateTimeOffset? ConnectedAt, bool Joined) expectedRestored = (null, true);
+        (restored.ConnectedAt, joined).Should().Be(expectedRestored,
+            "premise: the restored call has no connected time and can join a queue");
+        restored.TryCompleteConnectedWhileWaiting().Should().BeTrue(
+            "the restored call was connected, so when it is over while waiting in a later queue it ends completed");
+        restored.State.Should().Be(CallSessionState.Completed);
     }
 
     [Fact]

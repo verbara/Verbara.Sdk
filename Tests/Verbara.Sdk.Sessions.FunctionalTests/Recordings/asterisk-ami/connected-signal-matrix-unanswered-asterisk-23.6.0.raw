@@ -1,0 +1,3789 @@
+Asterisk Call Manager/12.0.0
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1795580106.099170
+UserEvent: CaptureProvenance
+AsteriskVersion: Asterisk 23.6.0
+Image: ghcr.io/verbara/asterisk-base:23.6.0_trixie-c62758c@sha256:bed956493e84e22841013d7ba356ce68be529bf11fcf65ef95b59cfd0b4eb1b5
+Workload: connected-signal-matrix
+ActionID: cap-2
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1795580327.218271
+UserEvent: CaptureMarker
+Step: requeue-timeout-01
+ActionID: cap-248
+
+Response: Success
+ActionID: cap-249
+Message: Originate successfully queued
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795580327.218664
+Channel: PJSIP/holdloop-00000082
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: matrix-requeue-timeout-01-o
+Linkedid: matrix-requeue-timeout-01-o
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795580327.218693
+Channel: PJSIP/holdloop-00000082
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: matrix-requeue-timeout-01-o
+Linkedid: matrix-requeue-timeout-01-o
+Extension: s
+Application: AppDial2
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1795580327.218701
+Channel: PJSIP/holdloop-00000082
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: matrix-requeue-timeout-01-o
+Linkedid: matrix-requeue-timeout-01-o
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1795580327.218707
+Channel: PJSIP/holdloop-00000082
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: matrix-requeue-timeout-01-o
+Linkedid: matrix-requeue-timeout-01-o
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1795580327.219196
+DestChannel: PJSIP/holdloop-00000082
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: 81701
+DestCallerIDName: Matrix
+DestConnectedLineNum: 81701
+DestConnectedLineName: Matrix
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: s
+DestPriority: 1
+DestUniqueid: matrix-requeue-timeout-01-o
+DestLinkedid: matrix-requeue-timeout-01-o
+DialString: requeue-timeout-in@holdloop
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795580327.219548
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795580327.219690
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Extension: requeue-timeout-in
+Application: Queue
+AppData: q-first,r
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580327.219718
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: ANSWEREDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580327.219727
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: ANSWEREDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580327.219735
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: DIALEDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580327.219742
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: DIALEDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580327.219745
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: QUEUEWAIT
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580327.219749
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: QUEUEWAIT_MS
+Value: 
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795580327.219790
+Device: Queue:q-first
+State: RINGING
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Timestamp: 1795580327.219807
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Queue: q-first
+Position: 1
+Count: 1
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795580327.226301
+Device: PJSIP/loop
+State: INUSE
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795580327.226460
+Channel: PJSIP/holdloop-00000082
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: matrix-requeue-timeout-01-o
+Linkedid: matrix-requeue-timeout-01-o
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795580327.226488
+Channel: PJSIP/agent1-00000084
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+
+Event: DialState
+Privilege: call,all
+Timestamp: 1795580327.226500
+DestChannel: PJSIP/holdloop-00000082
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: 81701
+DestCallerIDName: Matrix
+DestConnectedLineNum: 81701
+DestConnectedLineName: Matrix
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: s
+DestPriority: 1
+DestUniqueid: matrix-requeue-timeout-01-o
+DestLinkedid: matrix-requeue-timeout-01-o
+DialStatus: RINGING
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795580327.226506
+Device: PJSIP/holdloop
+State: RINGING
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795580327.226533
+Channel: PJSIP/agent1-00000084
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Extension: s
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1795580327.226537
+Channel: PJSIP/agent1-00000084
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580327.226542
+Channel: PJSIP/agent1-00000084
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Variable: DIALEDPEERNUMBER
+Value: agent1
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1795580327.226813
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+DestChannel: PJSIP/agent1-00000084
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: requeue-timeout-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 81701
+DestConnectedLineName: Matrix
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: requeue-timeout-in
+DestPriority: 1
+DestUniqueid: 1795580327.132
+DestLinkedid: 1795580327.131
+Queue: q-first
+Interface: PJSIP/agent1
+MemberName: PJSIP/agent1
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1795580327.226824
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+DestChannel: PJSIP/agent1-00000084
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: requeue-timeout-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1795580327.132
+DestLinkedid: 1795580327.131
+DialString: PJSIP/agent1
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795580327.227067
+Channel: PJSIP/loop-00000085
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 1
+Uniqueid: 1795580327.133
+Linkedid: 1795580327.133
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795580327.227178
+Channel: PJSIP/loop-00000085
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 1
+Uniqueid: 1795580327.133
+Linkedid: 1795580327.133
+Extension: agent1
+Application: Ringing
+AppData: 
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795580327.227216
+Channel: PJSIP/loop-00000085
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 2
+Uniqueid: 1795580327.133
+Linkedid: 1795580327.133
+Extension: agent1
+Application: Wait
+AppData: 1
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795580327.227288
+Channel: PJSIP/agent1-00000084
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795580327.227290
+Channel: PJSIP/agent1-00000084
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Extension: requeue-timeout-in
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1795580327.227291
+Channel: PJSIP/agent1-00000084
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+
+Event: DialState
+Privilege: call,all
+Timestamp: 1795580327.227304
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+DestChannel: PJSIP/agent1-00000084
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: requeue-timeout-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 81701
+DestConnectedLineName: Matrix
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: requeue-timeout-in
+DestPriority: 1
+DestUniqueid: 1795580327.132
+DestLinkedid: 1795580327.131
+DialStatus: RINGING
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795580327.227308
+Device: PJSIP/agent1
+State: RINGING
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795580327.227332
+Queue: q-first
+MemberName: PJSIP/agent1
+Interface: PJSIP/agent1
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795580105
+InCall: 0
+Status: 6
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795580327.227347
+Queue: q-local
+MemberName: Agent1 Local
+Interface: Local/agent1@from-queue/n
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795580105
+InCall: 0
+Status: 6
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795580328.228302
+Channel: PJSIP/loop-00000085
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 3
+Uniqueid: 1795580327.133
+Linkedid: 1795580327.133
+Extension: agent1
+Application: Answer
+AppData: 
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795580328.228313
+Channel: PJSIP/loop-00000085
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 3
+Uniqueid: 1795580327.133
+Linkedid: 1795580327.133
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795580328.228879
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1795580328.228904
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+DestChannel: PJSIP/agent1-00000084
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: requeue-timeout-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 81701
+DestConnectedLineName: Matrix
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: requeue-timeout-in
+DestPriority: 1
+DestUniqueid: 1795580327.132
+DestLinkedid: 1795580327.131
+DialStatus: ANSWER
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1795580328.228918
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795580328.228923
+Device: PJSIP/agent1
+State: INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795580328.228961
+Queue: q-first
+MemberName: PJSIP/agent1
+Interface: PJSIP/agent1
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795580105
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795580328.228995
+Queue: q-local
+MemberName: Agent1 Local
+Interface: Local/agent1@from-queue/n
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795580105
+InCall: 0
+Status: 2
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795580328.229025
+Device: Queue:q-first
+State: NOT_INUSE
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Timestamp: 1795580328.229040
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Queue: q-first
+Position: 1
+Count: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580328.229050
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: QUEUEPOSITION
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580328.229081
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: QUEUEWAIT
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580328.229086
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: QUEUEWAIT_MS
+Value: 1000
+
+Event: AgentConnect
+Privilege: agent,all
+Timestamp: 1795580328.229098
+Channel: PJSIP/loop-00000083
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+DestChannel: PJSIP/agent1-00000084
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: requeue-timeout-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 81701
+DestConnectedLineName: Matrix
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: requeue-timeout-in
+DestPriority: 1
+DestUniqueid: 1795580327.132
+DestLinkedid: 1795580327.131
+Queue: q-first
+Interface: PJSIP/agent1
+MemberName: PJSIP/agent1
+HoldTime: 1
+RingTime: 1
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795580328.229165
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+
+Event: BridgeCreate
+Privilege: call,all
+Timestamp: 1795580328.229397
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1795580328.229484
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795580328.229540
+Channel: PJSIP/holdloop-00000082
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: matrix-requeue-timeout-01-o
+Linkedid: matrix-requeue-timeout-01-o
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1795580328.229554
+DestChannel: PJSIP/holdloop-00000082
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: 81701
+DestCallerIDName: Matrix
+DestConnectedLineNum: 81701
+DestConnectedLineName: Matrix
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: s
+DestPriority: 1
+DestUniqueid: matrix-requeue-timeout-01-o
+DestLinkedid: matrix-requeue-timeout-01-o
+DialStatus: ANSWER
+
+Event: OriginateResponse
+Privilege: call,all
+Timestamp: 1795580328.229564
+ActionID: cap-249
+Response: Success
+Channel: PJSIP/holdloop-00000082
+Application: Stasis
+Data: capture-hold
+Reason: 4
+Uniqueid: matrix-requeue-timeout-01-o
+CallerIDNum: 81701
+CallerIDName: Matrix
+
+Event: BridgeEnter
+Privilege: call,all
+Timestamp: 1795580328.229572
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795580328.229594
+Device: PJSIP/holdloop
+State: INUSE
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580328.229607
+Channel: PJSIP/holdloop-00000082
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: matrix-requeue-timeout-01-o
+Linkedid: matrix-requeue-timeout-01-o
+Variable: STASISSTATUS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580328.229676
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: BRIDGEPEER
+Value: PJSIP/agent1-00000084
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580328.229683
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: BRIDGEPVTCALLID
+Value: 22222222-2222-2222-2222-222222222222
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580328.229688
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Variable: BRIDGEPEER
+Value: PJSIP/loop-00000083
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580328.229693
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Variable: BRIDGEPVTCALLID
+Value: 33333333-3333-3333-3333-333333333333
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580328.229751
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: BRIDGEPEER
+Value: PJSIP/agent1-00000084
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580328.229756
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: BRIDGEPVTCALLID
+Value: 22222222-2222-2222-2222-222222222222
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580328.229768
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Variable: BRIDGEPEER
+Value: PJSIP/loop-00000083
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580328.229773
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Variable: BRIDGEPVTCALLID
+Value: 33333333-3333-3333-3333-333333333333
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580328.229817
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: BRIDGEPEER
+Value: PJSIP/agent1-00000084
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580328.229820
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: BRIDGEPVTCALLID
+Value: 22222222-2222-2222-2222-222222222222
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580328.229831
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Variable: BRIDGEPEER
+Value: PJSIP/loop-00000083
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580328.229834
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Variable: BRIDGEPVTCALLID
+Value: 33333333-3333-3333-3333-333333333333
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795580328.729233
+Channel: PJSIP/loop-00000085
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 4
+Uniqueid: 1795580327.133
+Linkedid: 1795580327.133
+Extension: agent1
+Application: Wait
+AppData: 60
+
+Response: Success
+ActionID: cap-250
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1795580329.730663
+UserEvent: CaptureCheckpoint
+Name: answered
+ActionID: cap-250
+
+Response: Success
+ActionID: cap-251
+Message: Transfer succeeded
+
+Event: Unhold
+Privilege: call,all
+Timestamp: 1795580329.730799
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.730815
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Variable: BLINDTRANSFER
+Value: PJSIP/loop-00000083
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.730843
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: BLINDTRANSFER
+Value: PJSIP/agent1-00000084
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.730857
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Variable: BRIDGEPEER
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.730860
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Variable: BRIDGEPVTCALLID
+Value: 
+
+Event: BlindTransfer
+Privilege: call,all
+Timestamp: 1795580329.730889
+Result: Success
+TransfererChannel: PJSIP/agent1-00000084
+TransfererChannelState: 6
+TransfererChannelStateDesc: Up
+TransfererCallerIDNum: requeue-timeout-in
+TransfererCallerIDName: <unknown>
+TransfererConnectedLineNum: 81701
+TransfererConnectedLineName: Matrix
+TransfererLanguage: en
+TransfererAccountCode: 
+TransfererContext: capture-sip
+TransfererExten: requeue-timeout-in
+TransfererPriority: 1
+TransfererUniqueid: 1795580327.132
+TransfererLinkedid: 1795580327.131
+TransfereeChannel: PJSIP/loop-00000083
+TransfereeChannelState: 6
+TransfereeChannelStateDesc: Up
+TransfereeCallerIDNum: 81701
+TransfereeCallerIDName: Matrix
+TransfereeConnectedLineNum: requeue-timeout-in
+TransfereeConnectedLineName: <unknown>
+TransfereeLanguage: en
+TransfereeAccountCode: 
+TransfereeContext: capture-sip
+TransfereeExten: requeue-timeout-in
+TransfereePriority: 1
+TransfereeUniqueid: 1795580327.131
+TransfereeLinkedid: 1795580327.131
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: native_rtp
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 2
+BridgeVideoSourceMode: none
+IsExternal: Yes
+Context: capture
+Extension: second-tmo
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.730893
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: BRIDGEPEER
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.730897
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: BRIDGEPVTCALLID
+Value: 
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795580329.730909
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Extension: second-tmo
+Application: Queue
+AppData: q-first,r
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1795580329.730944
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: native_rtp
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 1
+BridgeVideoSourceMode: none
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+
+Event: AgentComplete
+Privilege: agent,all
+Timestamp: 1795580329.730963
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+DestChannel: PJSIP/agent1-00000084
+DestChannelState: 6
+DestChannelStateDesc: Up
+DestCallerIDNum: requeue-timeout-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 81701
+DestConnectedLineName: Matrix
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: requeue-timeout-in
+DestPriority: 1
+DestUniqueid: 1795580327.132
+DestLinkedid: 1795580327.131
+Queue: q-first
+Interface: PJSIP/agent1
+MemberName: PJSIP/agent1
+HoldTime: 1
+TalkTime: 1
+Reason: transfer
+
+Event: BridgeLeave
+Privilege: call,all
+Timestamp: 1795580329.731047
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+
+Event: BridgeDestroy
+Privilege: call,all
+Timestamp: 1795580329.731075
+BridgeUniqueid: 11111111-1111-1111-1111-111111111111
+BridgeType: basic
+BridgeTechnology: simple_bridge
+BridgeCreator: <unknown>
+BridgeName: <unknown>
+BridgeNumChannels: 0
+BridgeVideoSourceMode: none
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731097
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: DIALEDTIME
+Value: 2
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731103
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: DIALEDTIME_MS
+Value: 2511
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731109
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Variable: RTPAUDIOQOS
+Value: ssrc=1146095773;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731115
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: ANSWEREDTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731119
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: ANSWEREDTIME_MS
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731123
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731126
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731134
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731137
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731157
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: ANSWEREDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731160
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: ANSWEREDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731162
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: DIALEDTIME
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731165
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: DIALEDTIME_MS
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731173
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: QUEUEWAIT
+Value: 
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731176
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: QUEUEWAIT_MS
+Value: 
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795580329.731212
+Device: Queue:q-tmo
+State: RINGING
+
+Event: QueueCallerJoin
+Privilege: agent,all
+Timestamp: 1795580329.731230
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Queue: q-tmo
+Position: 1
+Count: 1
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795580329.731331
+Channel: PJSIP/agent1-00000084
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: requeue-timeout-in
+Priority: 1
+Uniqueid: 1795580327.132
+Linkedid: 1795580327.131
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795580329.731370
+Device: PJSIP/agent1
+State: NOT_INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795580329.731386
+Queue: q-first
+MemberName: PJSIP/agent1
+Interface: PJSIP/agent1
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 1
+LastCall: 1795580329
+LastPause: 0
+LoginTime: 1795580105
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795580329.731410
+Queue: q-local
+MemberName: Agent1 Local
+Interface: Local/agent1@from-queue/n
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795580105
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795580329.731473
+Channel: PJSIP/agent4-00000086
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: <unknown>
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795580329.134
+Linkedid: 1795580327.131
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795580329.731524
+Channel: PJSIP/agent4-00000086
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795580329.134
+Linkedid: 1795580327.131
+Extension: s
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewCallerid
+Privilege: call,all
+Timestamp: 1795580329.731527
+Channel: PJSIP/agent4-00000086
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795580329.134
+Linkedid: 1795580327.131
+CID-CallingPres: 0 (Presentation Allowed, Not Screened)
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731535
+Channel: PJSIP/loop-00000085
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 4
+Uniqueid: 1795580327.133
+Linkedid: 1795580327.133
+Variable: RTPAUDIOQOS
+Value: ssrc=521921989;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731539
+Channel: PJSIP/agent4-00000086
+ChannelState: 0
+ChannelStateDesc: Down
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: 1795580329.134
+Linkedid: 1795580327.131
+Variable: DIALEDPEERNUMBER
+Value: agent4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731541
+Channel: PJSIP/loop-00000085
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 4
+Uniqueid: 1795580327.133
+Linkedid: 1795580327.133
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731545
+Channel: PJSIP/loop-00000085
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 4
+Uniqueid: 1795580327.133
+Linkedid: 1795580327.133
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731548
+Channel: PJSIP/loop-00000085
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 4
+Uniqueid: 1795580327.133
+Linkedid: 1795580327.133
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580329.731558
+Channel: PJSIP/loop-00000085
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 4
+Uniqueid: 1795580327.133
+Linkedid: 1795580327.133
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: HangupRequest
+Privilege: call,all
+Timestamp: 1795580329.731578
+Channel: PJSIP/loop-00000085
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 4
+Uniqueid: 1795580327.133
+Linkedid: 1795580327.133
+Cause: 16
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1795580329.731600
+Channel: PJSIP/loop-00000085
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 4
+Uniqueid: 1795580327.133
+Linkedid: 1795580327.133
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795580329.731664
+Channel: PJSIP/loop-00000085
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent1
+Priority: 4
+Uniqueid: 1795580327.133
+Linkedid: 1795580327.133
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: AgentCalled
+Privilege: agent,all
+Timestamp: 1795580329.731813
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+DestChannel: PJSIP/agent4-00000086
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: requeue-timeout-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 81701
+DestConnectedLineName: Matrix
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: second-tmo
+DestPriority: 1
+DestUniqueid: 1795580329.134
+DestLinkedid: 1795580327.131
+Queue: q-tmo
+Interface: PJSIP/agent4
+MemberName: PJSIP/agent4
+
+Event: DialBegin
+Privilege: call,all
+Timestamp: 1795580329.731822
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+DestChannel: PJSIP/agent4-00000086
+DestChannelState: 0
+DestChannelStateDesc: Down
+DestCallerIDNum: requeue-timeout-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: <unknown>
+DestConnectedLineName: <unknown>
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: s
+DestPriority: 1
+DestUniqueid: 1795580329.134
+DestLinkedid: 1795580327.131
+DialString: PJSIP/agent4
+
+Event: Newchannel
+Privilege: call,all
+Timestamp: 1795580329.732088
+Channel: PJSIP/loop-00000087
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent4
+Priority: 1
+Uniqueid: 1795580329.135
+Linkedid: 1795580329.135
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795580329.732184
+Channel: PJSIP/loop-00000087
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent4
+Priority: 1
+Uniqueid: 1795580329.135
+Linkedid: 1795580329.135
+Extension: agent4
+Application: Ringing
+AppData: 
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795580329.732220
+Channel: PJSIP/loop-00000087
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent4
+Priority: 2
+Uniqueid: 1795580329.135
+Linkedid: 1795580329.135
+Extension: agent4
+Application: Wait
+AppData: 60
+
+Event: Newstate
+Privilege: call,all
+Timestamp: 1795580329.732304
+Channel: PJSIP/agent4-00000086
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580329.134
+Linkedid: 1795580327.131
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795580329.732306
+Channel: PJSIP/agent4-00000086
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580329.134
+Linkedid: 1795580327.131
+Extension: second-tmo
+Application: AppQueue
+AppData: (Outgoing Line)
+
+Event: NewConnectedLine
+Privilege: call,all
+Timestamp: 1795580329.732307
+Channel: PJSIP/agent4-00000086
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580329.134
+Linkedid: 1795580327.131
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795580329.732320
+Device: PJSIP/agent4
+State: RINGING
+
+Event: DialState
+Privilege: call,all
+Timestamp: 1795580329.732326
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+DestChannel: PJSIP/agent4-00000086
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: requeue-timeout-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 81701
+DestConnectedLineName: Matrix
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: second-tmo
+DestPriority: 1
+DestUniqueid: 1795580329.134
+DestLinkedid: 1795580327.131
+DialStatus: RINGING
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795580329.732338
+Queue: q-tmo
+MemberName: PJSIP/agent4
+Interface: PJSIP/agent4
+StateInterface: PJSIP/agent4
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795580105
+InCall: 0
+Status: 6
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795580329.732352
+Queue: q-key
+MemberName: PJSIP/agent4
+Interface: PJSIP/agent4
+StateInterface: PJSIP/agent4
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795580105
+InCall: 0
+Status: 6
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: AgentRingNoAnswer
+Privilege: agent,all
+Timestamp: 1795580333.732404
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+DestChannel: PJSIP/agent4-00000086
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: requeue-timeout-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 81701
+DestConnectedLineName: Matrix
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: second-tmo
+DestPriority: 1
+DestUniqueid: 1795580329.134
+DestLinkedid: 1795580327.131
+Queue: q-tmo
+Interface: PJSIP/agent4
+MemberName: PJSIP/agent4
+RingTime: 4000
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1795580333.732419
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+DestChannel: PJSIP/agent4-00000086
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: requeue-timeout-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 81701
+DestConnectedLineName: Matrix
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: second-tmo
+DestPriority: 1
+DestUniqueid: 1795580329.134
+DestLinkedid: 1795580327.131
+DialStatus: NOANSWER
+
+Event: DialEnd
+Privilege: call,all
+Timestamp: 1795580333.732422
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+DestChannel: PJSIP/agent4-00000086
+DestChannelState: 5
+DestChannelStateDesc: Ringing
+DestCallerIDNum: requeue-timeout-in
+DestCallerIDName: <unknown>
+DestConnectedLineNum: 81701
+DestConnectedLineName: Matrix
+DestLanguage: en
+DestAccountCode: 
+DestContext: capture-sip
+DestExten: second-tmo
+DestPriority: 1
+DestUniqueid: 1795580329.134
+DestLinkedid: 1795580327.131
+DialStatus: CANCEL
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580333.732436
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: ABANDONED
+Value: TRUE
+
+Event: QueueCallerAbandon
+Privilege: agent,all
+Timestamp: 1795580333.732441
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Queue: q-tmo
+Position: 1
+OriginalPosition: 1
+HoldTime: 4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580333.732451
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: QUEUEWAIT
+Value: 4
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580333.732454
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: QUEUEWAIT_MS
+Value: 4000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580333.732456
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: DIALEDTIME
+Value: 6
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580333.732458
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: DIALEDTIME_MS
+Value: 6512
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580333.732460
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: ANSWEREDTIME
+Value: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580333.732462
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: ANSWEREDTIME_MS
+Value: 0
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795580333.732498
+Device: Queue:q-tmo
+State: NOT_INUSE
+
+Event: QueueCallerLeave
+Privilege: agent,all
+Timestamp: 1795580333.732508
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Queue: q-tmo
+Position: 1
+Count: 0
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580333.732511
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: QUEUEPOSITION
+Value: 1
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580333.732514
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: QUEUESTATUS
+Value: TIMEOUT
+
+Event: Newexten
+Privilege: dialplan,all
+Timestamp: 1795580333.732551
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 2
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Extension: second-tmo
+Application: Wait
+AppData: 60
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795580333.732657
+Channel: PJSIP/agent4-00000086
+ChannelState: 5
+ChannelStateDesc: Ringing
+CallerIDNum: requeue-timeout-in
+CallerIDName: <unknown>
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: second-tmo
+Priority: 1
+Uniqueid: 1795580329.134
+Linkedid: 1795580327.131
+Cause: 0
+Cause-txt: Unknown
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795580333.732726
+Device: PJSIP/agent4
+State: NOT_INUSE
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795580333.732767
+Queue: q-tmo
+MemberName: PJSIP/agent4
+Interface: PJSIP/agent4
+StateInterface: PJSIP/agent4
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795580105
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: QueueMemberStatus
+Privilege: agent,all
+Timestamp: 1795580333.732784
+Queue: q-key
+MemberName: PJSIP/agent4
+Interface: PJSIP/agent4
+StateInterface: PJSIP/agent4
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795580105
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Ringinuse: 1
+Wrapuptime: 0
+
+Event: HangupRequest
+Privilege: call,all
+Timestamp: 1795580333.732894
+Channel: PJSIP/loop-00000087
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent4
+Priority: 2
+Uniqueid: 1795580329.135
+Linkedid: 1795580329.135
+Cause: 127
+TechCause: 487
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1795580333.732950
+Channel: PJSIP/loop-00000087
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent4
+Priority: 2
+Uniqueid: 1795580329.135
+Linkedid: 1795580329.135
+Cause: 16
+TechCause: 487
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795580333.733098
+Channel: PJSIP/loop-00000087
+ChannelState: 4
+ChannelStateDesc: Ring
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: <unknown>
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: agent4
+Priority: 2
+Uniqueid: 1795580329.135
+Linkedid: 1795580329.135
+Cause: 127
+Cause-txt: Interworking, unspecified
+TechCause: 487
+
+Response: Success
+ActionID: cap-252
+EventList: start
+Message: Channel status will follow
+
+Event: Status
+Privilege: Call
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 2
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Type: PJSIP
+DNID: requeue-timeout-in
+EffectiveConnectedLineNum: requeue-timeout-in
+EffectiveConnectedLineName: <unknown>
+TimeToHangup: 0
+BridgeID: 
+Application: Wait
+Data: 60
+Nativeformats: (ulaw)
+Readformat: ulaw
+Readtrans: 
+Writeformat: ulaw
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 7
+ActionID: cap-252
+
+Event: Status
+Privilege: Call
+Channel: PJSIP/holdloop-00000082
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: matrix-requeue-timeout-01-o
+Linkedid: matrix-requeue-timeout-01-o
+Type: PJSIP
+DNID: 
+EffectiveConnectedLineNum: 81701
+EffectiveConnectedLineName: Matrix
+TimeToHangup: 0
+BridgeID: 
+Application: Stasis
+Data: capture-hold
+Nativeformats: (ulaw)
+Readformat: ulaw
+Readtrans: 
+Writeformat: ulaw
+Writetrans: 
+Callgroup: 0
+Pickupgroup: 0
+Seconds: 7
+ActionID: cap-252
+
+Event: StatusComplete
+ActionID: cap-252
+EventList: Complete
+ListItems: 2
+Items: 2
+
+Response: Success
+ActionID: cap-253
+EventList: start
+Message: Queue status will follow
+
+Event: QueueParams
+Queue: q-lwe
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 5
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: cap-253
+
+Event: QueueParams
+Queue: q-tmo
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 11
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: cap-253
+
+Event: QueueMember
+Queue: q-tmo
+Name: PJSIP/agent4
+Location: PJSIP/agent4
+StateInterface: PJSIP/agent4
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795580105
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: cap-253
+
+Event: QueueParams
+Queue: q-key
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: cap-253
+
+Event: QueueMember
+Queue: q-key
+Name: PJSIP/agent4
+Location: PJSIP/agent4
+StateInterface: PJSIP/agent4
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795580105
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: cap-253
+
+Event: QueueParams
+Queue: q-first
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 1
+TalkTime: 1
+Completed: 1
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: cap-253
+
+Event: QueueMember
+Queue: q-first
+Name: PJSIP/agent1
+Location: PJSIP/agent1
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 1
+LastCall: 1795580329
+LastPause: 0
+LoginTime: 1795580105
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: cap-253
+
+Event: QueueParams
+Queue: q-second
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: cap-253
+
+Event: QueueMember
+Queue: q-second
+Name: PJSIP/agent2
+Location: PJSIP/agent2
+StateInterface: PJSIP/agent2
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795580105
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: cap-253
+
+Event: QueueParams
+Queue: q-agent
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: cap-253
+
+Event: QueueMember
+Queue: q-agent
+Name: Agent One
+Location: Local/1001@agent-request/n
+StateInterface: Agent:1001
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795580105
+InCall: 0
+Status: 5
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: cap-253
+
+Event: QueueParams
+Queue: q-local
+Max: 0
+Strategy: ringall
+Calls: 0
+Holdtime: 0
+TalkTime: 0
+Completed: 0
+Abandoned: 0
+ServiceLevel: 0
+ServicelevelPerf: 0.0
+ServicelevelPerf2: 0.0
+Weight: 0
+ActionID: cap-253
+
+Event: QueueMember
+Queue: q-local
+Name: Agent1 Local
+Location: Local/agent1@from-queue/n
+StateInterface: PJSIP/agent1
+Membership: static
+Penalty: 0
+CallsTaken: 0
+LastCall: 0
+LastPause: 0
+LoginTime: 1795580105
+InCall: 0
+Status: 1
+Paused: 0
+PausedReason: 
+Wrapuptime: 0
+ActionID: cap-253
+
+Event: QueueStatusComplete
+ActionID: cap-253
+EventList: Complete
+ListItems: 13
+
+Response: Success
+ActionID: cap-254
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1795580334.734418
+UserEvent: CaptureCheckpoint
+Name: left
+StatusId: cap-252
+QueueStatusId: cap-253
+ActionID: cap-254
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795580334.734979
+Device: PJSIP/holdloop
+State: ONHOLD
+
+Event: Hold
+Privilege: call,all
+Timestamp: 1795580334.735472
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 2
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+MusicClass: default
+
+Response: Success
+ActionID: cap-255
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1795580335.736892
+UserEvent: CaptureCheckpoint
+Name: held
+ActionID: cap-255
+
+Response: Success
+ActionID: cap-256
+Message: Channel Hungup
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580335.737099
+Channel: PJSIP/holdloop-00000082
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: matrix-requeue-timeout-01-o
+Linkedid: matrix-requeue-timeout-01-o
+Variable: STASISSTATUS
+Value: SUCCESS
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580335.737137
+Channel: PJSIP/holdloop-00000082
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: matrix-requeue-timeout-01-o
+Linkedid: matrix-requeue-timeout-01-o
+Variable: RTPAUDIOQOS
+Value: ssrc=72106548;themssrc=1391683745;lp=0;rxjitter=0.000000;rxcount=200;txjitter=0.000000;txcount=0;rlp=0;rtt=0.000000;rxmes=0.000000;txmes=88.087887
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580335.737144
+Channel: PJSIP/holdloop-00000082
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: matrix-requeue-timeout-01-o
+Linkedid: matrix-requeue-timeout-01-o
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580335.737148
+Channel: PJSIP/holdloop-00000082
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: matrix-requeue-timeout-01-o
+Linkedid: matrix-requeue-timeout-01-o
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580335.737151
+Channel: PJSIP/holdloop-00000082
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: matrix-requeue-timeout-01-o
+Linkedid: matrix-requeue-timeout-01-o
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580335.737159
+Channel: PJSIP/holdloop-00000082
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: matrix-requeue-timeout-01-o
+Linkedid: matrix-requeue-timeout-01-o
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=088.087887;   maxrxmes=088.087887;   avgrxmes=088.087887;   stdevrxmes=000.000000;   mintxmes=000.000000;   maxtxmes=000.000000;   avgtxmes=000.000000;   stdevtxmes=000.000000;
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795580335.737412
+Channel: PJSIP/holdloop-00000082
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: 81701
+ConnectedLineName: Matrix
+Language: en
+AccountCode: 
+Context: capture-sip
+Exten: s
+Priority: 1
+Uniqueid: matrix-requeue-timeout-01-o
+Linkedid: matrix-requeue-timeout-01-o
+Cause: 0
+Cause-txt: Unknown
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795580335.737487
+Device: PJSIP/holdloop
+State: NOT_INUSE
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580335.737601
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 2
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: RTPAUDIOQOS
+Value: ssrc=1391683745;themssrc=0;lp=0;rxjitter=0.000000;rxcount=0;txjitter=0.000000;txcount=200;rlp=0;rtt=0.000000;rxmes=88.087887;txmes=0.000000
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580335.737606
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 2
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: RTPAUDIOQOSJITTER
+Value: minrxjitter=000.000000;maxrxjitter=000.000000;avgrxjitter=000.000000;stdevrxjitter=000.000000;mintxjitter=000.000000;maxtxjitter=000.000000;avgtxjitter=000.000000;stdevtxjitter=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580335.737609
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 2
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: RTPAUDIOQOSLOSS
+Value:   minrxlost=000.000000;  maxrxlost=000.000000;  avgrxlost=000.000000;  stdevrxlost=000.000000;  mintxlost=000.000000;  maxtxlost=000.000000;  avgtxlost=000.000000;  stdevtxlost=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580335.737613
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 2
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: RTPAUDIOQOSRTT
+Value:      minrtt=000.000000;     maxrtt=000.000000;     avgrtt=000.000000;     stdevrtt=000.000000;
+
+Event: VarSet
+Privilege: dialplan,all
+Timestamp: 1795580335.737617
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 2
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Variable: RTPAUDIOQOSMES
+Value:    minrxmes=000.000000;   maxrxmes=000.000000;   avgrxmes=000.000000;   stdevrxmes=000.000000;   mintxmes=088.087887;   maxtxmes=088.087887;   avgtxmes=088.087887;   stdevtxmes=000.000000;
+
+Event: HangupRequest
+Privilege: call,all
+Timestamp: 1795580335.737634
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 2
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Cause: 16
+
+Event: SoftHangupRequest
+Privilege: call,all
+Timestamp: 1795580335.737680
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 2
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Cause: 16
+
+Event: Hangup
+Privilege: call,all
+Timestamp: 1795580335.737745
+Channel: PJSIP/loop-00000083
+ChannelState: 6
+ChannelStateDesc: Up
+CallerIDNum: 81701
+CallerIDName: Matrix
+ConnectedLineNum: requeue-timeout-in
+ConnectedLineName: <unknown>
+Language: en
+AccountCode: 
+Context: capture
+Exten: second-tmo
+Priority: 2
+Uniqueid: 1795580327.131
+Linkedid: 1795580327.131
+Cause: 16
+Cause-txt: Normal Clearing
+
+Event: DeviceStateChange
+Privilege: call,all
+Timestamp: 1795580335.737793
+Device: PJSIP/loop
+State: NOT_INUSE
+
+Response: Success
+ActionID: cap-257
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1795580336.738142
+UserEvent: CaptureCheckpoint
+Name: end
+ActionID: cap-257
+
+Response: Success
+ActionID: cap-258
+EventList: start
+Message: Channels hung up will follow
+
+Event: ChannelsHungupListComplete
+ActionID: cap-258
+EventList: Complete
+ListItems: 0
+
+Response: Success
+ActionID: cap-259
+EventList: start
+Message: Channels will follow
+
+Event: CoreShowChannelsComplete
+ActionID: cap-259
+EventList: Complete
+ListItems: 0
+
+Response: Success
+ActionID: cap-260
+Message: Event Sent
+
+Event: UserEvent
+Privilege: user,all
+Timestamp: 1795580337.739539
+UserEvent: CaptureOutcome
+Step: requeue-timeout-01
+Row: requeue-timeout
+CallerId: 81701
+CallerUniqueid: 1795580327.131
+ActionID: cap-260
+
+Response: Success
+ActionID: cap-261
+Message: Event Sent
+

@@ -226,7 +226,8 @@ public sealed class VerificationClosesAQueueVisitOnceTests : IAsyncLifetime
 
     /// <summary>
     /// app_queue's <c>QueueCallerLeave</c> for the caller of <paramref name="id"/>, as the server's event observer
-    /// routes it: the table's leave, then the report, with the event-loss epoch now.
+    /// routes it: the table's leave, then the report, with the event-loss epoch now and no dialplan location (the
+    /// rig's joins carry none either).
     /// </summary>
     private void ReportLeave(string id, string? uniqueId = null, string? name = null)
     {
@@ -235,6 +236,6 @@ public sealed class VerificationClosesAQueueVisitOnceTests : IAsyncLifetime
 
         _rig.Server.Queues.OnCallerLeft(Queue, name);
         var epoch = ReadEventLossEpoch.Invoke(_rig.Server, null);
-        OnCallerLeaveReported.Invoke(_rig.Server.Queues, [uniqueId, Queue, name, epoch]);
+        OnCallerLeaveReported.Invoke(_rig.Server.Queues, [uniqueId, Queue, name, epoch, null]);
     }
 }

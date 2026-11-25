@@ -35,7 +35,8 @@ public sealed class CallSessionManagerConnectedMemberTests
 
         Connected(rig, session.SessionId).Should().Equal(expected,
             "each visit's announcement names the member app_queue reported connecting that visit");
-        session.AgentInterface.Should().Be(First, "the call keeps recording its first member, as before");
+        session.AgentInterface.Should().Be(Second, "the call records the member of its most recent connection");
+        session.AgentId.Should().BeNull("neither connect named an agent");
     }
 
     [Fact]
@@ -67,8 +68,50 @@ public sealed class CallSessionManagerConnectedMemberTests
             "a call outside any queue is announced by the agent's connect, which names the agent's interface");
     }
 
+    /// <summary>
+    /// The connect of an agent known by name that finds the call already connected: the agent's leg is reported
+    /// answered before the connect, the order Asterisk sends a leg's answer and app_queue's connect report in. The leg's
+    /// answer made the connection and announced it with no agent; the connect that follows makes none, so it records
+    /// no agent, and the call says what its one announcement said. The frames are synthetic: no capture holds an
+    /// <c>AgentConnect</c> naming an agent.
+    /// </summary>
     [Fact]
-    public async Task BridgeEntered_ShouldNameTheInterfaceTheCallRecorded_WhenACallThatNeverJoinedAQueueConnectsAgain()
+    public async Task AgentConnected_ShouldRecordNoAgent_WhenAKnownAgentsConnectFindsTheCallAlreadyConnectedByItsLegsAnswer()
+    {
+        await using var rig = await WrapUpRig.StartAsync(new FakeTimeProvider());
+        rig.Deliver(AgentLogin("agent-4", "PJSIP/agent4", "login-4"));
+        rig.Deliver(
+            NewChannel("n1", CallerChannel("n1"), "Down", "n1", context: "from-trunk", exten: "600"),
+            NewState("n1", "Ring"),
+            NewChannel("nm1", MemberChannel("PJSIP/agent4", "nm1"), "Down", "n1", context: "agents"),
+            new DialBeginEvent
+            {
+                EventType = "DialBegin", UniqueId = "n1", Channel = CallerChannel("n1"), DestUniqueid = "nm1",
+                DestChannel = MemberChannel("PJSIP/agent4", "nm1"), DialString = "PJSIP/agent4",
+            },
+            NewState("nm1", "Up"));
+        var session = rig.Session("n1");
+        var beforeConnect = session.State;
+        rig.Deliver(
+            AgentConnect("", "n1", CallerChannel("n1"), "n1", "PJSIP/agent4", "nm1", MemberChannel("PJSIP/agent4", "nm1"),
+                "agent-4"),
+            NewState("n1", "Up"),
+            BridgeCreate(Bridge("n1")),
+            BridgeEnter(Bridge("n1"), "nm1"),
+            BridgeEnter(Bridge("n1"), "n1"));
+
+        var connected = rig.Events.OfType<CallConnectedEvent>().Where(e => e.SessionId == session.SessionId).ToList();
+
+        beforeConnect.Should().Be(CallSessionState.Connected, "premise: the leg's answer connected the call");
+        connected.Should().ContainSingle("only the leg's answer made a connection")
+            .Which.AgentId.Should().BeNull("the leg's answer names no agent");
+        (session.AgentId, session.AgentInterface).Should().Be((connected[0].AgentId, connected[0].AgentInterface),
+            "a connect that makes no connection records neither its agent nor its interface, so the call says what its "
+            + "one announcement said");
+    }
+
+    [Fact]
+    public async Task BridgeEntered_ShouldNameNoMember_WhenACallThatNeverJoinedAQueueConnectsAgainAfterATransfer()
     {
         await using var rig = await WrapUpRig.StartAsync(new FakeTimeProvider());
         rig.Deliver(AgentLogin("agent-4", "PJSIP/agent4", "login-4"));
@@ -87,12 +130,49 @@ public sealed class CallSessionManagerConnectedMemberTests
             BridgeEnter("bridge-n1-2", "n1"));
         var session = rig.Session("n1");
 
-        (string? Queue, string? Member)[] expected = [(null, "PJSIP/agent4"), (null, "PJSIP/agent4")];
+        (string? Queue, string? Member)[] expected = [(null, "PJSIP/agent4"), (null, null)];
 
         Connected(rig, session.SessionId).Should().Equal(expected,
             "the agent's connect announces the call with the agent's interface; after the transfer the call's "
-            + "bridge announces it connected again and names the interface the call recorded, the agent's");
-        session.AgentInterface.Should().Be("PJSIP/agent4", "the agent's connect recorded its interface");
+            + "bridge announces it connected again, and no member's connect made that connection");
+        (string? AgentId, string? AgentInterface) noAgent = (null, null);
+        (session.AgentId, session.AgentInterface).Should().Be(noAgent,
+            "the bridge entry made the call's most recent connection and names no agent and no member, so the call "
+            + "no longer records agent-4");
+    }
+
+    [Fact]
+    public async Task LegAnswered_ShouldClearTheAgentAndTheMember_WhenAQueuedCallAKnownAgentTookReturnsFromABlindTransfer()
+    {
+        await using var rig = await WrapUpRig.StartAsync(new FakeTimeProvider());
+        rig.Deliver(AgentLogin("agent-1", First, "login-1"));
+        rig.Deliver(QueueCallConnected("sales", "c1", "m1", First, agent: "agent-1"));
+        var session = rig.Session("c1");
+        var afterConnect = (session.AgentId, session.AgentInterface);
+        (string? AgentId, string? AgentInterface)? atReturn = null;
+        using var reader = rig.Manager.Events.Subscribe(evt =>
+        {
+            if (evt is CallConnectedEvent c && c.SessionId == session.SessionId)
+                atReturn = (session.AgentId, session.AgentInterface);
+        });
+        rig.Deliver(MemberBlindTransfers("sales", "c1", "m1", First, "from-trunk", "700", agent: "agent-1"));
+        rig.Deliver(
+            NewChannel("t1", MemberChannel("PJSIP/ext700", "t1"), "Down", "c1", context: "from-trunk"),
+            NewState("t1", "Up"),
+            BridgeCreate("bridge-c1-2"),
+            BridgeEnter("bridge-c1-2", "t1"),
+            BridgeEnter("bridge-c1-2", "c1"));
+
+        (string? AgentId, string? AgentInterface) agent1 = ("agent-1", First);
+        (string? AgentId, string? AgentInterface) noAgentAfterReturn = (null, null);
+        afterConnect.Should().Be(agent1, "premise: agent-1's connect recorded the agent");
+        Connected(rig, session.SessionId).Should().Equal([("sales", First), (null, null)],
+            "premise: the extension's answer returns the call to connected, a connection no member made");
+        atReturn.Should().Be(noAgentAfterReturn,
+            "the extension's answer made the call's most recent connection, which names no agent and no member, so "
+            + "a consumer of the return's announcement no longer reads agent-1");
+        (session.AgentId, session.AgentInterface).Should().Be(noAgentAfterReturn,
+            "the call still records no agent and no member after the return");
     }
 
     [Fact]

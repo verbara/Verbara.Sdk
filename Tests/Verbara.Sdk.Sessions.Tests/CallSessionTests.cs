@@ -156,4 +156,28 @@ public sealed class CallSessionTests
         session.WaitTime.Should().NotBeNull();
         session.WaitTime!.Value.TotalSeconds.Should().BeApproximately(5, 0.1);
     }
+
+    /// <summary>
+    /// A cause recorded for the call's first channel is not the cause of a caller another channel's join makes: a visit
+    /// that opens for that other channel forgets it, and one that opens again for the same channel keeps its cause.
+    /// </summary>
+    [Fact]
+    public void OpenVisitCaller_ShouldForgetTheRecordedCause_WhenTheVisitsCallerIsAnotherChannel()
+    {
+        var session = CreateSession();
+        session.AddParticipant(new SessionParticipant { UniqueId = "agent-leg", Channel = "PJSIP/agent1-00000001", Technology = "PJSIP" });
+        session.AddParticipant(new SessionParticipant { UniqueId = "customer-leg", Channel = "PJSIP/trunk-00000002", Technology = "PJSIP" });
+        session.RecordCallerHangup("agent-leg", Verbara.Sdk.Enums.HangupCause.UserBusy);
+        var before = session.CallerHangupCause;
+
+        session.OpenVisitCaller("customer-leg", "PJSIP/trunk-00000002");
+        var afterAnotherCaller = session.CallerHangupCause;
+        session.RecordCallerHangup("customer-leg", Verbara.Sdk.Enums.HangupCause.NormalClearing);
+        session.OpenVisitCaller("customer-leg", "PJSIP/trunk-00000002");
+
+        before.Should().Be(Verbara.Sdk.Enums.HangupCause.UserBusy, "premise: the first channel's cause is recorded");
+        afterAnotherCaller.Should().BeNull("the visit's caller is another channel, whose cause is unknown");
+        session.CallerHangupCause.Should().Be(Verbara.Sdk.Enums.HangupCause.NormalClearing,
+            "a visit that opens again for the same caller keeps the cause recorded for it");
+    }
 }

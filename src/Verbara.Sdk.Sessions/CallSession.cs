@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Verbara.Sdk.Enums;
+using Verbara.Sdk.Live.Queues;
 using Verbara.Sdk.Live.Server;
 using Verbara.Sdk.Sessions.Exceptions;
 
@@ -14,12 +15,22 @@ public sealed class CallSession
     internal TimeSpan _accumulatedHoldTime;
 
     public CallSession(string sessionId, string linkedId, string serverId, CallDirection direction)
+        : this(sessionId, linkedId, serverId, direction, DateTimeOffset.UtcNow)
+    {
+    }
+
+    /// <summary>
+    /// A session opened at <paramref name="createdAt"/>: the session engine passes its own clock's reading, so opening a
+    /// call reads one clock once.
+    /// </summary>
+    internal CallSession(string sessionId, string linkedId, string serverId, CallDirection direction,
+        DateTimeOffset createdAt)
     {
         SessionId = sessionId;
         LinkedId = linkedId;
         ServerId = serverId;
         Direction = direction;
-        CreatedAt = DateTimeOffset.UtcNow;
+        CreatedAt = createdAt;
     }
 
     // Identity
@@ -28,6 +39,15 @@ public sealed class CallSession
     public string ServerId { get; }
 
     // State
+    /// <summary>
+    /// Where the call stands now. <see cref="CallSessionState.Connected"/> means the call is in conversation with someone
+    /// now, and each entry into it from dialing, ringing, queued or transferring is announced by one
+    /// <see cref="CallConnectedEvent"/>; a call that joins a queue, even after it was connected or transferring, waits in
+    /// <see cref="CallSessionState.Queued"/>. A queue visit that ends unanswered (the queue reports it abandoned, then the
+    /// caller leaving, as on a queue timeout) returns the call, at its caller's channel's next report, silently to the
+    /// state it had before the visit. A call answered by the dialplan alone, with no dial or queue, stays
+    /// <see cref="CallSessionState.Created"/> while it is live.
+    /// </summary>
     public CallSessionState State { get; internal set; } = CallSessionState.Created;
     public CallDirection Direction { get; }
 
@@ -53,9 +73,12 @@ public sealed class CallSession
     public string? QueueName { get; set; }
 
     /// <summary>
-    /// The agent the SDK knows by name that took the call, as its connect names it. Set only by the connect of
-    /// an agent the server knows by name; app_queue's own connect report names no agent, so a call taken by a
-    /// queue member that is not such an agent leaves it <c>null</c>.
+    /// The agent the SDK knows by name whose connect made the call's most recent connection, as that connect names
+    /// it. Each connection replaces an earlier connection's, and one whose connect named no agent sets it to
+    /// <c>null</c>: app_queue's report of a new connection (it names no agent, so a call taken by a queue member that
+    /// is not such an agent reads <c>null</c>), a leg's answer, a dial outcome or a bridge entry, as for a return from
+    /// a transfer. app_queue's report of the connection a known agent's connect has just made keeps it. Written
+    /// together with <see cref="AgentInterface"/>, before the connection is announced.
     /// </summary>
     public string? AgentId { get; set; }
 
@@ -63,19 +86,35 @@ public sealed class CallSession
     /// The interface of the queue member that took the call, exactly as app_queue reports it in its connect
     /// report (<c>AgentConnect</c>'s <c>Interface</c>): <c>PJSIP/agent1</c> for an endpoint member. For a member
     /// that is a <c>Local</c> channel it is the <c>Local</c> interface (<c>Local/agent1@from-queue/n</c>), not
-    /// the device it dials. It is set on the first connection and kept when a later queue visit of the call is
-    /// taken by another member; the connect of an agent known by name writes that agent's interface on each
-    /// visit it takes. It is <c>null</c> when no member took the call, or when the AMI user lacks the
-    /// <c>agent</c> read class, without which Asterisk sends none of app_queue's events.
+    /// the device it dials. It is the member of the call's most recent connection, recorded before that connection is
+    /// announced: a later queue visit taken by another member replaces it, and the connect of an agent known by name
+    /// records that agent's interface, which app_queue's report of the same connection keeps. A connection no member
+    /// made (a leg's answer, a dial outcome or a bridge entry, as for a return from a transfer) sets it to <c>null</c>.
+    /// It is <c>null</c> when no member took the call, or when the AMI user lacks the <c>agent</c> read class, without
+    /// which Asterisk sends none of app_queue's events.
     /// </summary>
     public string? AgentInterface { get; set; }
     public string? BridgeId { get; set; }
 
     /// <summary>Tenant identifier. The SDK does not assign it; the host sets it.</summary>
     public string? TenantId { get; set; }
+
+    /// <summary>
+    /// The cause Asterisk reported for the call's ending, or <c>null</c> when a state reload proved its channels gone and
+    /// no hang-up was observed. It is the cause of the call's last departing channel, except for a call that was
+    /// connected and ends while it waits in a later queue, or while it is back in transferring after that queue's visit
+    /// ended unanswered and before anyone answered it: that one carries its caller's own channel's cause, whichever
+    /// channel Asterisk reports hanging up last.
+    /// </summary>
     public HangupCause? HangupCause { get; set; }
 
     // Timestamps
+    /// <summary>
+    /// When the SDK opened the call's record: the arrival of its first channel the SDK observed, read on the session
+    /// engine's clock, or, for a call a state reload or the admission of existing calls opened, when the SDK learned
+    /// of it. <see cref="WaitTime"/> runs from it, and so does the wait the call's first
+    /// <see cref="CallConnectedEvent"/> carries when that connection answers no queue visit.
+    /// </summary>
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? DialingAt { get; set; }
     /// <summary>
@@ -90,10 +129,13 @@ public sealed class CallSession
     public DateTimeOffset? QueuedAt { get; set; }
 
     /// <summary>
-    /// When the SDK observed the call connected. For a call answered while still in its initial state
-    /// (an IVR, an originate answered with no dial onward) and ended there, it is applied at the ending,
-    /// from the observed answer. It is <c>null</c> while such a call is live, and <c>null</c> for a call
-    /// opened from a reload whose answer the SDK never observed.
+    /// When the SDK first observed the call connected: the timestamp of the call's first
+    /// <see cref="CallConnectedEvent"/>, set as that event is published and never changed after it. A return from hold,
+    /// a reload, an admission, or a report that finds the call already connected does not set it, even while it is
+    /// <c>null</c>. So it is <c>null</c> for a call a reload or an admission opened connected until a connection of its
+    /// own is observed, and then it is that connection's announcement. For a call answered while still in its initial
+    /// state (an IVR, an originate answered with no dial onward) and ended there, it is applied at the ending, from the
+    /// observed answer; it is <c>null</c> while such a call is live.
     /// </summary>
     public DateTimeOffset? ConnectedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
@@ -123,11 +165,14 @@ public sealed class CallSession
     private const byte HasLastDepartureFlag = 4;
     private const byte ReloadDepartureFlag = 8;
     private const byte HasDepartureCauseFlag = 16;
+    private const byte ConnectedFlag = 32;
+    private const byte HasCallerCauseFlag = 64;
     private const byte DepartureProvenanceFlags = HasLastDepartureFlag | ReloadDepartureFlag | HasDepartureCauseFlag;
     private byte _endingFlags;
     /// <summary>The delivering or joined attachment's generation; internal and never persisted.</summary>
     internal long AttachmentGeneration { get; set; }
     private int _lastDepartureCause;
+    private int _callerHangupCause;
     private long _firstParticipantMark;
     private EndingOverflow? _endingOverflow;
 
@@ -139,6 +184,26 @@ public sealed class CallSession
         internal HashSet<(string Id, long Mark)>? RecordedDepartures;
     }
 
+    // The state only a queue visit, a transfer or a hold writes: allocated by the first write of a value other than
+    // its default, so a call that never queues, transfers or holds carries one null reference for all of it and its
+    // arrival allocates nothing more. A read of an unallocated one is the default (null or false). Read and written
+    // under SyncRoot.
+    private EpisodeState? _episode;
+
+    private sealed class EpisodeState
+    {
+        internal DateTimeOffset? TransferringAt;
+        internal CallSessionState? StateBeforeQueueVisit;
+        internal QueueDialplanLocation? QueueVisitJoinLocation;
+        internal string? HoldChannelUniqueId;
+        internal bool QueueVisitEndedUnanswered;
+        internal bool AwaitingAnswerAfterUnansweredVisit;
+        internal bool TransferringAfterUnansweredVisit;
+    }
+
+    /// <summary>The episode state to write a value other than the default into, allocated on first use.</summary>
+    private EpisodeState Episode => _episode ??= new();
+
     internal bool Unverified
     {
         get => (_endingFlags & UnverifiedFlag) != 0;
@@ -147,6 +212,14 @@ public sealed class CallSession
 
     private bool IsFirstParticipant(string id) => _participants.Count != 0
         && string.Equals(_participants[0].UniqueId, id, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Whether <paramref name="id"/> is the caller's own channel: the one whose join opened the call's current queue
+    /// visit (<see cref="QueueVisitCallerUniqueId"/>), and the call's first participant while it has had no visit.
+    /// </summary>
+    private bool IsCaller(string id) => QueueVisitCallerUniqueId is { } visitCaller
+        ? string.Equals(visitCaller, id, StringComparison.Ordinal)
+        : IsFirstParticipant(id);
 
     private HashSet<(string Id, long Mark)> OverflowDepartures =>
         (_endingOverflow ??= new()).RecordedDepartures ??= [];
@@ -159,9 +232,21 @@ public sealed class CallSession
         _endingFlags &= unchecked((byte)~FirstDepartureRecordedFlag);
     }
 
+    /// <summary>
+    /// Records <paramref name="mark"/> as the admission mark of <paramref name="id"/>, a channel the call holds alive.
+    /// The caller's own channel held alive again no longer has the hang-up cause recorded for it, so that cause is
+    /// forgotten.
+    /// </summary>
     internal void SetParticipantMark(string id, long mark)
     {
-        if (_participants.Count == 0 || IsFirstParticipant(id))
+        // IsCaller(id), with the first-participant comparison made once for both uses.
+        var first = _participants.Count == 0 || IsFirstParticipant(id);
+        if (_participants.Count == 0
+            || (QueueVisitCallerUniqueId is { } visitCaller
+                ? string.Equals(visitCaller, id, StringComparison.Ordinal)
+                : first))
+            ClearCallerHangup();
+        if (first)
         {
             PreserveRecordedFirstMark(mark);
             _firstParticipantMark = mark;
@@ -200,6 +285,54 @@ public sealed class CallSession
     {
         _endingFlags &= unchecked((byte)~FirstDepartureRecordedFlag);
         if (_endingOverflow is not null) _endingOverflow.RecordedDepartures = null;
+    }
+
+    /// <summary>
+    /// Whether this call was ever connected: it entered <see cref="CallSessionState.Connected"/> by a transition, or a
+    /// reload or an admission opened it there, or it was restored connected or with a connected time. An answer
+    /// recorded while the call was in its initial state (<see cref="AnsweredInInitialStateAt"/>) is not a connection
+    /// and does not set it. A call restored from its snapshot or registered reconstructed in a state only a connection
+    /// reaches has it set too. Not persisted; nothing clears it. Read under <see cref="SyncRoot"/>.
+    /// </summary>
+    internal bool HasBeenConnected => (_endingFlags & ConnectedFlag) != 0 || ConnectedAt.HasValue;
+
+    internal void MarkConnected() => _endingFlags |= ConnectedFlag;
+
+    /// <summary>
+    /// Marks the call as having been connected when its current state is one only a connection reaches (connected, on
+    /// hold, transferring or in a conference): the rule for a call this manager did not watch connect, restored from its
+    /// snapshot or registered reconstructed.
+    /// </summary>
+    internal void MarkConnectedWhenInAConnectedState()
+    {
+        if (State is CallSessionState.Connected or CallSessionState.OnHold or CallSessionState.Transferring
+            or CallSessionState.Conference)
+            MarkConnected();
+    }
+
+    /// <summary>
+    /// The cause Asterisk reported on the hang-up of the caller's own channel, recorded when that channel's departure is
+    /// observed: the channel whose join opened the call's current queue visit, which waits there, and the call's first
+    /// participant while it has had no visit. <c>null</c> until then, for a caller a reload proved gone, once the
+    /// caller's channel is held alive again (<see cref="SetParticipantMark"/>), and when a visit opens for another
+    /// channel than the one it was recorded for (<see cref="OpenVisitCaller"/>). A new attachment's demotion keeps it.
+    /// Called and read under <see cref="SyncRoot"/>.
+    /// </summary>
+    internal HangupCause? CallerHangupCause =>
+        (_endingFlags & HasCallerCauseFlag) != 0 ? (HangupCause)_callerHangupCause : null;
+
+    /// <summary>Records <paramref name="cause"/> when <paramref name="uniqueId"/> is the caller's own channel.</summary>
+    internal void RecordCallerHangup(string uniqueId, HangupCause cause)
+    {
+        if (!IsCaller(uniqueId)) return;
+        _endingFlags |= HasCallerCauseFlag;
+        _callerHangupCause = (int)cause;
+    }
+
+    internal void ClearCallerHangup()
+    {
+        _endingFlags &= unchecked((byte)~HasCallerCauseFlag);
+        _callerHangupCause = 0;
     }
 
     internal (bool Reload, HangupCause? Cause)? LastDeparture
@@ -275,6 +408,22 @@ public sealed class CallSession
     internal DateTimeOffset? QueueVisitStartedAt { get; set; }
 
     /// <summary>
+    /// When the call last became <see cref="CallSessionState.Transferring"/>, on the manager's clock: the instant its
+    /// latest <c>CallTransferredEvent</c> carries, replaced at each transfer. The announcement of a return from that
+    /// transfer waits from it. <c>null</c> when the manager never saw the call become transferring, as for a session
+    /// restored from a snapshot. Written only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal DateTimeOffset? TransferringAt
+    {
+        get => _episode?.TransferringAt;
+        set
+        {
+            if (value is not null || _episode is not null)
+                Episode.TransferringAt = value;
+        }
+    }
+
+    /// <summary>
     /// Whether Asterisk has reported the caller leaving the current visit's queue (a
     /// <c>QueueCallerLeave</c> for <see cref="QueueName"/>) since the manager opened the visit. app_queue
     /// closes every visit with that leave, so a later report of the caller waiting in the same queue is a
@@ -316,6 +465,157 @@ public sealed class CallSession
 
     /// <inheritdoc cref="QueueVisitCallerUniqueId"/>
     internal string? QueueVisitCallerChannel { get; set; }
+
+    /// <summary>
+    /// Records the channel whose join opens a new visit as the visit's caller. A caller's hang-up cause recorded for
+    /// another channel (the call's first participant, or an earlier visit's caller) is not this caller's, so it is
+    /// forgotten. Called under <see cref="SyncRoot"/>.
+    /// </summary>
+    internal void OpenVisitCaller(string uniqueId, string? channel)
+    {
+        if (!IsCaller(uniqueId))
+            ClearCallerHangup();
+        QueueVisitCallerUniqueId = uniqueId;
+        QueueVisitCallerChannel = channel;
+    }
+
+    /// <summary>
+    /// The state the call had before the first queue visit of a chain: set when a join moves the call into
+    /// <see cref="CallSessionState.Queued"/> from another state, and kept by a join that finds it still queued (a second
+    /// queue the dialplan runs right after an unanswered one). <see langword="null"/> for a call the manager never saw
+    /// join from another state. Written only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal CallSessionState? StateBeforeQueueVisit
+    {
+        get => _episode?.StateBeforeQueueVisit;
+        set
+        {
+            if (value is not null || _episode is not null)
+                Episode.StateBeforeQueueVisit = value;
+        }
+    }
+
+    /// <summary>
+    /// Where in the dialplan the caller stood when the join that opened the current visit was reported: its
+    /// <c>Context</c>, <c>Exten</c> and <c>Priority</c>. <c>null</c> for a visit whose join the manager did not see (a
+    /// queue snapshot opened it) or whose join lacked any of the three. Set at each visit the manager opens. Written
+    /// only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal QueueDialplanLocation? QueueVisitJoinLocation
+    {
+        get => _episode?.QueueVisitJoinLocation;
+        set
+        {
+            if (value is not null || _episode is not null)
+                Episode.QueueVisitJoinLocation = value;
+        }
+    }
+
+    /// <summary>
+    /// Whether the current visit ended unanswered and the call has not returned from it yet, while the call waited in
+    /// <see cref="CallSessionState.Queued"/>: app_queue reported the visit abandoned (<c>QueueCallerAbandon</c>) and then
+    /// the caller leaving (<c>QueueCallerLeave</c>), or reported the leave with no abandon and with a <c>Context</c>,
+    /// <c>Exten</c> or <c>Priority</c> other than the join's (<see cref="QueueVisitJoinLocation"/>), which is how a caller
+    /// leaves by the queue's exit key. Set at that leave, cleared at the return and at each visit the manager opens.
+    /// Written only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal bool QueueVisitEndedUnanswered
+    {
+        get => _episode is { QueueVisitEndedUnanswered: true };
+        set
+        {
+            if (value || _episode is not null)
+                Episode.QueueVisitEndedUnanswered = value;
+        }
+    }
+
+    /// <summary>
+    /// Returns the call, waiting in <see cref="CallSessionState.Queued"/> after a visit that ended unanswered
+    /// (<see cref="QueueVisitEndedUnanswered"/>), to <see cref="StateBeforeQueueVisit"/> when
+    /// <paramref name="uniqueId"/> is the channel that waited in the queue (<see cref="QueueVisitCallerUniqueId"/>): its
+    /// report is the call's next one, which the caller then handles in the state returned to. Returns <c>true</c> when it
+    /// returned the call; otherwise it changes nothing. A visit whose prior state is unknown leaves the call queued.
+    /// <para>
+    /// This is not a transition and deliberately does not go through <see cref="TryTransition"/>: nothing new happened
+    /// to the call, which is again what it was a moment before the visit, so no timestamp moves and nothing is
+    /// announced. Called under <see cref="SyncRoot"/>.
+    /// </para>
+    /// </summary>
+    internal bool TryReturnFromUnansweredVisit(string uniqueId)
+    {
+        if (!QueueVisitEndedUnanswered || State != CallSessionState.Queued
+            || !string.Equals(QueueVisitCallerUniqueId, uniqueId, StringComparison.Ordinal))
+            return false;
+
+        QueueVisitEndedUnanswered = false;
+        if (StateBeforeQueueVisit is not { } before || before == CallSessionState.Queued)
+            return false;
+
+        State = before;
+        if (before == CallSessionState.Transferring)
+            TransferringAfterUnansweredVisit = true;
+        if (before is CallSessionState.Created or CallSessionState.Dialing or CallSessionState.Ringing && !HasBeenConnected)
+            AwaitingAnswerAfterUnansweredVisit = true;
+        return true;
+    }
+
+    /// <summary>
+    /// Whether the call, never connected, is back in its initial state, <see cref="CallSessionState.Dialing"/> or
+    /// <see cref="CallSessionState.Ringing"/> after a queue visit that ended unanswered (and has dialed on from there,
+    /// if it was back in its initial state) and nobody has answered it since.
+    /// Until then a report of the channel that waited in the queue does not connect it
+    /// (<see cref="IsUnansweredWaitingCallersOwnReport"/>): only someone else answering, or the caller entering a bridge
+    /// where someone already is, does. Set by
+    /// <see cref="TryReturnFromUnansweredVisit"/>, cleared by the call's next connection and at each visit the manager
+    /// opens. Written only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal bool AwaitingAnswerAfterUnansweredVisit
+    {
+        get => _episode is { AwaitingAnswerAfterUnansweredVisit: true };
+        set
+        {
+            if (value || _episode is not null)
+                Episode.AwaitingAnswerAfterUnansweredVisit = value;
+        }
+    }
+
+    /// <summary>
+    /// Whether a report of channel <paramref name="uniqueId"/> is the waiting channel's own while the call awaits an
+    /// answer after an unanswered visit (<see cref="AwaitingAnswerAfterUnansweredVisit"/>): its answer (the dialplan's
+    /// <c>Answer()</c>) or its entering a bridge. Nobody answered the call, so such a report does not connect it;
+    /// a dial outcome of ANSWER, another channel of the call answering or entering a bridge, or the caller entering a
+    /// bridge where someone already is, does: the bridge entry handler checks the bridge's count. Read under
+    /// <see cref="SyncRoot"/>.
+    /// </summary>
+    internal bool IsUnansweredWaitingCallersOwnReport(string uniqueId) => AwaitingAnswerAfterUnansweredVisit
+        && string.Equals(QueueVisitCallerUniqueId, uniqueId, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Whether the call is back in <see cref="CallSessionState.Transferring"/> after a queue visit that ended unanswered
+    /// and nobody has answered it since: transferred, alone, and not yet with anyone. Until then its ending follows the
+    /// cause of the channel that waited in the queue, as a connected call's that hangs up waiting in a queue does
+    /// (<see cref="TryCompleteConnectedWhileWaiting"/>). Set by <see cref="TryReturnFromUnansweredVisit"/>, cleared by
+    /// the call's next connection. Written only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal bool TransferringAfterUnansweredVisit
+    {
+        get => _episode is { TransferringAfterUnansweredVisit: true };
+        set
+        {
+            if (value || _episode is not null)
+                Episode.TransferringAfterUnansweredVisit = value;
+        }
+    }
+
+    /// <summary>
+    /// Whether the call's ending is decided by the cause of the channel that waited in a queue: it was connected and
+    /// waits in <see cref="CallSessionState.Queued"/>, or it is back in <see cref="CallSessionState.Transferring"/> after
+    /// an unanswered visit and nobody has answered it since (<see cref="TransferringAfterUnansweredVisit"/>). Read under
+    /// <see cref="SyncRoot"/>.
+    /// </summary>
+    internal bool EndsOnWaitingCallersCause => HasBeenConnected
+        && (State == CallSessionState.Queued
+            || (State == CallSessionState.Transferring && TransferringAfterUnansweredVisit));
 
     /// <summary>
     /// The legs of this call that an agent or a queue member took and that the manager still counts as connected
@@ -371,6 +671,8 @@ public sealed class CallSession
             return;
 
         State = state;
+        if (state == CallSessionState.Connected)
+            MarkConnected();
     }
 
     /// <summary>
@@ -392,9 +694,10 @@ public sealed class CallSession
     /// <summary>
     /// When a leg of this call was observed answering while the session was still in its initial state
     /// (<see cref="CallSessionState.Created"/>): the dialplan answered it, and no dial or queue had reached
-    /// it yet. Only the first such answer is kept. It is a record, not a state: nothing is published,
-    /// counted or saved when it is taken, and it is not persisted. It is read only at the call's ending
-    /// (<see cref="TryCompleteAnsweredInInitialState"/>). Written only under <see cref="SyncRoot"/>.
+    /// it yet, or it is back there after a queue visit that ended unanswered. Only the first such answer is kept. It is a
+    /// record, not a state: nothing is published, counted or saved when it is taken, and it is not persisted. It is read
+    /// only at the call's ending (<see cref="TryCompleteAnsweredInInitialState"/>), which ignores it for a call that
+    /// entered a queue. Written only under <see cref="SyncRoot"/>.
     /// </summary>
     internal DateTimeOffset? AnsweredInInitialStateAt { get; private set; }
 
@@ -424,8 +727,14 @@ public sealed class CallSession
     /// and is queued or dialed afterwards, so the outcome is decided here, at the ending, instead.
     /// </para>
     /// <para>
+    /// It holds only for a call that never entered a queue (<see cref="QueuedAt"/> is unset). A call back in its
+    /// initial state after a queue visit that ended unanswered was abandoned in that queue: whatever its channel reported
+    /// after the visit (a hold, a bridge it entered alone, an answer), nobody answered it, and it ends
+    /// <see cref="CallSessionState.Failed"/> with no <see cref="ConnectedAt"/>.
+    /// </para>
+    /// <para>
     /// It guards its own state rather than trusting its caller: it acts only on a session that is still
-    /// <see cref="CallSessionState.Created"/> and holds an observed answer. A session that is already
+    /// <see cref="CallSessionState.Created"/>, never queued, and holds an observed answer. A session that is already
     /// terminal — ended by another route before the last leg left — keeps its ending. When it acts,
     /// <see cref="ConnectedAt"/> takes the observed answer unless it already holds a time, and
     /// <see cref="CompletedAt"/> takes the current time unless it already holds one. Called under
@@ -434,7 +743,8 @@ public sealed class CallSession
     /// </summary>
     internal bool TryCompleteAnsweredInInitialState()
     {
-        if (State != CallSessionState.Created || AnsweredInInitialStateAt is not { } answeredAt)
+        if (State != CallSessionState.Created || QueuedAt is not null
+            || AnsweredInInitialStateAt is not { } answeredAt)
             return false;
 
         ConnectedAt ??= answeredAt;
@@ -443,8 +753,39 @@ public sealed class CallSession
         return true;
     }
 
+    /// <summary>
+    /// Ends, as <see cref="CallSessionState.Completed"/>, a call that was connected and is over while it waits in a later
+    /// queue (<see cref="CallSessionState.Queued"/>), or while it is back in <see cref="CallSessionState.Transferring"/>
+    /// after that queue's visit ended unanswered and nobody has answered it since: the caller hung up normally, or a
+    /// reload proved its channels gone, before anyone answered. Returns <c>true</c> if it did; otherwise it changes
+    /// nothing and returns <c>false</c>.
+    /// <para>
+    /// This is not a transition and deliberately does not go through <see cref="TryTransition"/>.
+    /// <see cref="CallSessionStateTransitions"/> lets <see cref="CallSessionState.Queued"/> and
+    /// <see cref="CallSessionState.Transferring"/> end only as <c>Failed</c>, which is right for a call abandoned in the
+    /// queue before it ever connected, a call the dialplan answered included; adding <c>Queued → Completed</c> or
+    /// <c>Transferring → Completed</c> to the table would end those, and every transfer that goes nowhere, completed too.
+    /// A call that was connected took place, so the outcome is decided here, at the ending. It acts only on a session for
+    /// which <see cref="EndsOnWaitingCallersCause"/> holds; <see cref="ConnectedAt"/> is left as it is, and
+    /// <see cref="CompletedAt"/> takes the current time unless it already holds one. Called under <see cref="SyncRoot"/>.
+    /// </para>
+    /// </summary>
+    internal bool TryCompleteConnectedWhileWaiting()
+    {
+        if (!EndsOnWaitingCallersCause)
+            return false;
+
+        State = CallSessionState.Completed;
+        CompletedAt ??= DateTimeOffset.UtcNow;
+        return true;
+    }
+
     // Hold time tracking
-    internal void StartHold() => _holdStartedAt = DateTimeOffset.UtcNow;
+    internal void StartHold(string? channelUniqueId = null)
+    {
+        _holdStartedAt = DateTimeOffset.UtcNow;
+        HoldChannelUniqueId = channelUniqueId;
+    }
 
     internal void EndHold()
     {
@@ -453,7 +794,30 @@ public sealed class CallSession
             _accumulatedHoldTime += DateTimeOffset.UtcNow - _holdStartedAt.Value;
             _holdStartedAt = null;
         }
+        HoldChannelUniqueId = null;
     }
+
+    /// <summary>
+    /// The channel whose hold started the running hold clock, or <see langword="null"/> when no hold is running or it is
+    /// not known (a session restored from a store). Written only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal string? HoldChannelUniqueId
+    {
+        get => _episode?.HoldChannelUniqueId;
+        private set
+        {
+            if (value is not null || _episode is not null)
+                Episode.HoldChannelUniqueId = value;
+        }
+    }
+
+    /// <summary>
+    /// Whether the end of a hold of channel <paramref name="uniqueId"/> ends the running hold clock: a hold is running and
+    /// it was started by that channel, or by a channel not known (a session restored from a store). Read under
+    /// <see cref="SyncRoot"/>.
+    /// </summary>
+    internal bool IsRunningHoldOf(string uniqueId) => _holdStartedAt.HasValue
+        && (HoldChannelUniqueId is null || string.Equals(HoldChannelUniqueId, uniqueId, StringComparison.Ordinal));
 
     // Mutators
     internal void AddParticipant(SessionParticipant participant) => _participants.Add(participant);
@@ -468,7 +832,7 @@ public sealed class CallSession
             case CallSessionState.Dialing: DialingAt ??= now; break;
             case CallSessionState.Ringing: RingingAt ??= now; break;
             case CallSessionState.Queued: QueuedAt ??= now; break;
-            case CallSessionState.Connected: ConnectedAt ??= now; break;
+            case CallSessionState.Connected: MarkConnected(); break;
             case CallSessionState.Completed:
             case CallSessionState.Failed:
             case CallSessionState.TimedOut:

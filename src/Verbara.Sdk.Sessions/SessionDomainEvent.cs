@@ -73,19 +73,51 @@ public abstract record SessionDomainEvent(string SessionId, string ServerId, Dat
 public sealed record CallStartedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     CallDirection Direction, string? CallerIdNum) : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
+/// <summary>
+/// Reports that the call entered <see cref="CallSessionState.Connected"/> because someone answered: raised once each
+/// time the call's transition into connected succeeds from <see cref="CallSessionState.Dialing"/>,
+/// <see cref="CallSessionState.Ringing"/>, <see cref="CallSessionState.Queued"/> or
+/// <see cref="CallSessionState.Transferring"/>, whichever report made it (a leg's answer, a dial outcome, a bridge entry,
+/// the connect of an agent known by name, or app_queue's report of the connection), while the session engine holds the
+/// call's lock. None is raised for a return from hold, which <see cref="CallResumedEvent"/> reports, for a call a state
+/// reload or the admission of existing calls opens connected, for an answer by the dialplan while the call is still in
+/// its initial state, or for a report that finds the call already connected.
+/// </summary>
+/// <remarks>
+/// <para>
+/// When it is delivered the call is connected and <see cref="CallSession.ConnectedAt"/> is set; the call's first one
+/// carries, as <see cref="SessionDomainEvent.Timestamp"/>, the instant <see cref="CallSession.ConnectedAt"/> holds.
+/// </para>
+/// <para>
+/// Each notification describes its own connection, not the call's history. <c>WaitTime</c> runs to this connection
+/// from: the queue visit's start (when Asterisk says the caller joined, the instant that visit's
+/// <see cref="CallQueuedEvent"/> carries) for a connection that answers a queue visit; the call's creation
+/// (<see cref="CallSession.CreatedAt"/>) for the call's first connection otherwise; and the instant the call last
+/// became transferring (the timestamp of its latest <see cref="CallTransferredEvent"/>) for a return from a transfer.
+/// It is zero when that start is unknown, as for a call restored from a snapshot. <see cref="CallSession.WaitTime"/>
+/// is not this: it stays the call's creation to its first connection.
+/// </para>
+/// <para>
+/// <c>QueueName</c> names the queue whose visit this connection answers, and is <see langword="null"/> for a
+/// connection that answers none (a plain dial's answer, a return from a transfer), even when the call joined a queue
+/// earlier; <see cref="CallSession.QueueName"/> keeps naming the last queue the call joined. <c>AgentId</c> is the
+/// agent the connect that made this connection named, <see langword="null"/> when no agent's connect made it, as for
+/// app_queue's own report, a leg's answer, a dial outcome or a bridge entry.
+/// </para>
+/// </remarks>
 public sealed record CallConnectedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     string? AgentId, string? QueueName, TimeSpan WaitTime) : SessionDomainEvent(SessionId, ServerId, Timestamp)
 {
     /// <summary>
     /// The interface of the member whose connect this notification announces, exactly as Asterisk reported it in that
     /// connect: <c>PJSIP/agent1</c> for an endpoint member, the <c>Local</c> interface for a member that is a
-    /// <c>Local</c> channel. <see langword="null"/> when the SDK has none, as for a call that never joined a queue and
-    /// that no agent known by name connected.
+    /// <c>Local</c> channel. <see langword="null"/> when no member's connect made the connection: a leg's answer, a
+    /// dial outcome or a bridge entry, as for a plain dial's answer or a return from a transfer.
     /// </summary>
     /// <remarks>
     /// It is taken from the connect being announced, so each queue visit of a call names the member that answered that
-    /// visit. It may differ from <see cref="CallSession.AgentInterface"/>, which keeps the call's first member when a
-    /// later visit is taken by another. Not a positional member: a notification built with the positional constructor
+    /// visit. When this notification is delivered, <see cref="CallSession.AgentInterface"/> already records the member
+    /// of the connection it announces. Not a positional member: a notification built with the positional constructor
     /// alone names no member, and two notifications that differ only by it are not equal.
     /// </remarks>
     public string? AgentInterface { get; init; }
@@ -97,11 +129,33 @@ public sealed record CallTransferredEvent(string SessionId, string ServerId, Dat
 public sealed record CallHeldEvent(string SessionId, string ServerId, DateTimeOffset Timestamp)
     : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
+/// <summary>
+/// Reports that a call on hold (<see cref="CallSessionState.OnHold"/>) was taken off hold and is back in
+/// <see cref="CallSessionState.Connected"/>. Raised only for a call whose hold was counted: an unhold Asterisk reports
+/// for a call in any other state, as it does when a channel enters a bridge, raises nothing.
+/// </summary>
 public sealed record CallResumedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp)
     : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
+/// <summary>
+/// Reports that a call ended, raised once per call, a failed call included, while the session engine holds the call's
+/// lock; <c>Cause</c> is its hangup cause, and <see cref="FinalState"/> the state it ended in.
+/// </summary>
 public sealed record CallEndedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
-    HangupCause? Cause, TimeSpan Duration, TimeSpan? TalkTime) : SessionDomainEvent(SessionId, ServerId, Timestamp);
+    HangupCause? Cause, TimeSpan Duration, TimeSpan? TalkTime) : SessionDomainEvent(SessionId, ServerId, Timestamp)
+{
+    /// <summary>
+    /// The state the call ended in: <see cref="CallSessionState.Completed"/> or <see cref="CallSessionState.Failed"/>,
+    /// the state <see cref="CallSession.State"/> reads when this notification is delivered. Set by the session engine
+    /// after the call's final transition and before any subscriber receives the notification.
+    /// </summary>
+    /// <remarks>
+    /// It lets a consumer that keeps only the notifications learn how a call ended without its session. Not a
+    /// positional member: a notification built with the positional constructor alone carries <see langword="null"/>,
+    /// and two notifications that differ only by it are not equal.
+    /// </remarks>
+    public CallSessionState? FinalState { get; init; }
+}
 
 /// <summary>
 /// Never raised by the SDK. Every ending of a call, a failed one included, is raised as <see cref="CallEndedEvent"/>,

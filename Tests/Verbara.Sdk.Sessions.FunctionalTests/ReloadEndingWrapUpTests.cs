@@ -112,7 +112,10 @@ public sealed class ReloadEndingWrapUpTests
 
     /// <summary>
     /// The agent's answered call: the caller's channel and the agent's leg, connected by an <c>AgentConnect</c> that
-    /// names the agent, both legs up and bridged. With <paramref name="queued"/>, the caller first joins a queue.
+    /// names the agent, both legs up and bridged. With <paramref name="queued"/>, the caller first joins a queue, and
+    /// the connect follows the agent's answer, as app_queue reports it. Without, the caller dials the agent's leg and
+    /// the connect comes before the leg's answer: a call outside a queue is announced by the report that connects it,
+    /// and a leg's answer reported first would connect it naming no agent.
     /// </summary>
     private static List<ManagerEvent> AnsweredCall(bool queued)
     {
@@ -120,23 +123,34 @@ public sealed class ReloadEndingWrapUpTests
         const string agentLeg = "m1";
         const string callerChannel = "PJSIP/trunk-c1";
         const string agentChannel = "PJSIP/agent1-m1";
+        var connect = QueueFrames.AgentConnect(queued ? "sales" : "", caller, callerChannel, caller, Member, agentLeg,
+            agentChannel, holdTime: 0, agent: Agent);
         List<ManagerEvent> frames = [QueueFrames.NewChannel(caller, callerChannel, "Ring", caller, "5551234", "from-trunk", "500")];
-        frames.Add(queued
-            ? QueueFrames.Join("sales", callerChannel, caller, "5551234")
-            : QueueFrames.NewState(caller, "Ring"));
-
-        frames.AddRange(
-        [
-            QueueFrames.NewChannel(agentLeg, agentChannel, "Down", caller, context: "agents"),
-            QueueFrames.NewState(agentLeg, "Up"),
-        ]);
         if (queued)
-            frames.Add(QueueFrames.Leave("sales", callerChannel, caller));
+        {
+            frames.AddRange(
+            [
+                QueueFrames.Join("sales", callerChannel, caller, "5551234"),
+                QueueFrames.NewChannel(agentLeg, agentChannel, "Down", caller, context: "agents"),
+                QueueFrames.NewState(agentLeg, "Up"),
+                QueueFrames.Leave("sales", callerChannel, caller),
+                connect,
+            ]);
+        }
+        else
+        {
+            frames.AddRange(
+            [
+                QueueFrames.NewState(caller, "Ring"),
+                QueueFrames.NewChannel(agentLeg, agentChannel, "Down", caller, context: "agents"),
+                QueueFrames.DialBegin(caller, callerChannel, agentLeg, agentChannel, Member),
+                connect,
+                QueueFrames.NewState(agentLeg, "Up"),
+            ]);
+        }
 
         frames.AddRange(
         [
-            QueueFrames.AgentConnect(queued ? "sales" : "", caller, callerChannel, caller, Member, agentLeg, agentChannel,
-                holdTime: 0, agent: Agent),
             QueueFrames.NewState(caller, "Up"),
             QueueFrames.BridgeCreate("bridge-c1"),
             QueueFrames.BridgeEnter("bridge-c1", agentLeg),

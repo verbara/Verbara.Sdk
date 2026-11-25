@@ -229,8 +229,9 @@ public sealed class QueueReloadVisitStartTests
     }
 
     /// <summary>
-    /// The backdated start reaches neither of the call's own public values: the event's wait is still the
-    /// call's wait since it was created, and the call's queued time is not before it was created.
+    /// The backdated start is the visit's, and reaches the announcement of that visit, which waits from it, but
+    /// neither of the call's own public values: the call's wait is still its wait since the SDK learned of it, and
+    /// its queued time is not before it was created.
     /// </summary>
     [Fact]
     public async Task Reload_ShouldKeepTheCallsOwnWaitAndQueuedTime_WhenTheVisitStartsBeforeTheReload()
@@ -247,9 +248,12 @@ public sealed class QueueReloadVisitStartTests
         var session = rig.Manager.GetById(connected.SessionId);
         session.Should().NotBeNull("the call is still up");
         session!.ConnectedAt.Should().NotBeNull("premise: the call's own connection was observed");
-        connected.WaitTime.Should().Be(session.ConnectedAt!.Value - session.CreatedAt,
-            "CallConnectedEvent.WaitTime is the call's own wait, ConnectedAt minus CreatedAt");
-        session.WaitTime.Should().Be(connected.WaitTime, "the call's own wait keeps its meaning");
+        connected.WaitTime.Should().Be(TimeSpan.FromSeconds(12),
+            "the announcement waits from the visit's start, 5 s before the reload by the snapshot's account, to the "
+            + "member's answer 7 s after it");
+        session.WaitTime.Should().Be(session.ConnectedAt!.Value - session.CreatedAt,
+            "the call's own wait keeps its meaning, ConnectedAt minus CreatedAt");
+        session.WaitTime.Should().Be(TimeSpan.FromSeconds(7), "the SDK learned of the call at the reload");
         if (session.QueuedAt is { } queuedAt)
             queuedAt.Should().BeOnOrAfter(session.CreatedAt, "the call's queued time is never before the SDK learned of it");
     }

@@ -120,6 +120,43 @@ public sealed class AnsweredWithNoDialTests : IAsyncLifetime
             + $"follows. Measured: {Describe(session)}");
     }
 
+    // --- the answered call that is queued and abandoned -----------------------------------------
+
+    /// <summary>
+    /// The dialplan answers the call and queues it, and the caller hangs up normally before any member answers. The
+    /// dialplan's answer is not a connection, so this is not a connected call hanging up while it waits: it is a call
+    /// abandoned in the queue, and it ends failed, with no connected time.
+    /// </summary>
+    [Fact]
+    public void Hangup_ShouldEndTheCallFailed_WhenTheDialplanAnsweredAndQueuedItAndItHangsUpBeforeAnyMemberAnswers()
+    {
+        var session = GivenAnInboundCallInItsInitialState();
+
+        _fixture.SimulateAnswer(CallerUid);
+        _fixture.SimulateQueueCallerJoined("support", CallerChannel, "5551234");
+        var whileWaiting = session.State;
+        _fixture.SimulateHangup(CallerUid, HangupCause.NormalClearing);
+
+        new
+        {
+            WhileWaiting = whileWaiting,
+            session.State,
+            session.HangupCause,
+            ConnectedAtIsSet = session.ConnectedAt.HasValue,
+            Endings = EndingsOf(session).Count,
+        }.Should().BeEquivalentTo(
+            new
+            {
+                WhileWaiting = CallSessionState.Queued,
+                State = CallSessionState.Failed,
+                HangupCause = (HangupCause?)HangupCause.NormalClearing,
+                ConnectedAtIsSet = false,
+                Endings = 1,
+            },
+            "a call the dialplan answered and queued was never connected, so hanging up before any member answers "
+            + $"abandons it: it ends failed, once. Measured: {Describe(session)}");
+    }
+
     // --- the call that was never answered --------------------------------------------------------
 
     [Fact]

@@ -7,7 +7,8 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 
 /// <summary>
 /// When, and how often, a queue call is announced connected: once per queue visit, at app_queue's
-/// <c>AgentConnect</c>, whatever bridges follow.
+/// <c>AgentConnect</c>, whatever bridges of that visit follow, and once more when a transfer returns it to
+/// connected.
 /// </summary>
 /// <remarks>
 /// The frames are two calls Asterisk 22.9.0 sent live, written as typed events with the fields
@@ -45,16 +46,21 @@ public sealed class QueueVisitAnnouncementTests
     }
 
     [Fact]
-    public async Task QueueCall_ShouldNotBeAnnouncedAgain_WhenTheAnsweredVisitIsTransferredAndBridgedAgain()
+    public async Task QueueCall_ShouldBeAnnouncedOnceMore_WhenTheAnsweredVisitIsTransferredAndTheTargetAnswers()
     {
         await using var rig = await QueueCallRig.StartAsync();
 
         rig.Deliver(AnsweredThenTransferredToADial());
 
-        rig.Connected.Should().ContainSingle(
-                "the transfer's dial and bridge reconnect a visit that app_queue connected once")
-            .Which.QueueName.Should().Be("q-pjsip");
-        rig.Counts("q-pjsip").Should().Be(new QueueOutcome(Answered: 1, Abandoned: 0, Waiting: 0), "the queue answered the call once, and the transfer changes nothing there");
+        rig.Connected.Should().HaveCount(2,
+            "app_queue's connect announces the visit, and the transfer target's answer returns the call to connected, "
+            + "which is announced once more; the dial outcome and the bridge that follow it find the call connected");
+        rig.Connected[0].QueueName.Should().Be("q-pjsip", "the first announcement is the queue visit's");
+        (string? QueueName, string? AgentInterface, string? AgentId) noVisit = (null, null, null);
+        (rig.Connected[1].QueueName, rig.Connected[1].AgentInterface, rig.Connected[1].AgentId).Should().Be(noVisit,
+            "the return answers no queue visit, and no member's or agent's connect made it");
+        rig.Counts("q-pjsip").Should().Be(new QueueOutcome(Answered: 1, Abandoned: 0, Waiting: 0),
+            "the queue answered the call once; the return is not its answer");
     }
 
     [Fact]
@@ -80,17 +86,18 @@ public sealed class QueueVisitAnnouncementTests
         rig.Connected.Select(e => (e.QueueName, e.AgentInterface)).Should().Equal(
             [("q-pjsip", "PJSIP/agent1"), ("q-pjsip3", "PJSIP/agent3")],
             "each visit's announcement names the member app_queue reported connecting that visit");
-        rig.Manager.GetById(rig.Connected[1].SessionId)!.AgentInterface.Should().Be("PJSIP/agent1",
-            "the call keeps recording its first member, as before");
+        rig.Manager.GetById(rig.Connected[1].SessionId)!.AgentInterface.Should().Be("PJSIP/agent3",
+            "the call records the member of its most recent connection, the second visit's");
     }
 
     /// <summary>
-    /// The call's own wait keeps its meaning, time since the call was created, whatever the queue
-    /// measures per visit. The IVR is the one PI's capture shows: the caller is answered before it
-    /// joins the queue.
+    /// The announcement carries the wait of the visit it answers, from the visit's start, which is the instant its
+    /// <see cref="CallQueuedEvent"/> carries, and not the IVR before it; the call's own wait keeps its meaning, time
+    /// since the call was created. The IVR is the one PI's capture shows: the caller is answered before it joins the
+    /// queue.
     /// </summary>
     [Fact]
-    public async Task CallConnectedEvent_ShouldKeepTheWaitSinceTheCallWasCreated_WhenAnIvrRanBeforeTheQueue()
+    public async Task CallConnectedEvent_ShouldCarryTheVisitsWait_WhenAnIvrRanBeforeTheQueue()
     {
         await using var rig = await QueueCallRig.StartAsync();
 
@@ -98,12 +105,14 @@ public sealed class QueueVisitAnnouncementTests
 
         rig.Connected.Should().ContainSingle("app_queue connected the visit once");
         var connected = rig.Connected[0];
+        var visit = rig.Queued.Should().ContainSingle("the caller joined q-pjsip once").Subject;
         var session = rig.Manager.GetById(connected.SessionId);
         session.Should().NotBeNull("the call is still up");
         session!.ConnectedAt.Should().NotBeNull("the member answered");
-        var sinceCreated = session.ConnectedAt!.Value - session.CreatedAt;
-        connected.WaitTime.Should().Be(sinceCreated, "the event reports the wait since the call was created, IVR included");
-        session.WaitTime.Should().Be(sinceCreated, "and so does the call itself");
+        connected.WaitTime.Should().Be(connected.Timestamp - visit.Timestamp,
+            "the event reports the wait of the visit it answers, from the visit's start, IVR excluded");
+        session.WaitTime.Should().Be(session.ConnectedAt!.Value - session.CreatedAt,
+            "the call's own wait is still the time since it was created, IVR included");
     }
 
     // --- The captured calls -------------------------------------------------------------------

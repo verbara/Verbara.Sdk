@@ -90,6 +90,16 @@ public sealed class QueueShapeMemberReplayTests
                 shape.ConnectedEvents.Where(e => e.QueueName is not null).Should().OnlyContain(
                     e => e.AgentInterface == member,
                     "{0}: the call-connected event names the member app_queue reported for that connection", shape.Shape.Name);
+                foreach (var evt in shape.ConnectedEvents.Where(e => e.QueueName is not null))
+                {
+                    var visit = shape.QueuedEvents.LastOrDefault(q =>
+                        string.Equals(q.SessionId, evt.SessionId, StringComparison.Ordinal) && q.Timestamp <= evt.Timestamp);
+                    visit.Should().NotBeNull("premise: {0}'s announced visit was opened by a queued event", shape.Shape.Name);
+                    visit!.QueueName.Should().Be(evt.QueueName,
+                        "{0}: the event names the queue of the visit it answers", shape.Shape.Name);
+                    evt.WaitTime.Should().Be(evt.Timestamp - visit.Timestamp,
+                        "{0}: the event's wait is that visit's, from its start to the connection", shape.Shape.Name);
+                }
             }
             else
             {

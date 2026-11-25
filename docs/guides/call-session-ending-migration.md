@@ -156,7 +156,7 @@ whose hangup the SDK never received — ends the way a reconnect's reload ends i
 | A call Asterisk still has, older than the timeouts (a long IVR, a long ring, a long dial) | ended by the sweep: `TimedOut`, or `Failed` with `cause=orphaned`; its `Duration` cut at the sweep | untouched; it ends at its hangup, with that hangup's state, cause, talk time and duration |
 | A call that rang past the timeouts and was then answered | `TimedOut`, no talk time, no `CallConnectedEvent` | `Completed` with its talk time, as any answered call |
 | A call whose hangup was lost (Asterisk dropped it, the SDK never saw it go) | held for the life of the process, still active in a durable store; a connected call was never ended | ended at the first sweep after Asterisk dropped it: `Completed` if it was answered, `Failed` otherwise, no `HangupCause`, `Metadata["cause"] == "reload"`, one `CallEndedEvent`, saved to the store and released after `CompletedRetention` |
-| A queued call whose hangup was lost | held | ended as above (`Failed`), and its queue visit counted abandoned once |
+| A queued call whose hangup was lost | held | ended as above (`Failed`), and its queue visit counted abandoned once; since 2.11.0 a call that was connected before it joined the queue ends `Completed`, and on its caller's own cause when that caller's hangup was seen (see below) |
 | `sessions.timed_out`, `sessions.orphaned` | moved by the sweep (`sessions.timed_out` twice per call) | never move, and 2.11.0 removed both; a call the sweep ends is counted once, in `sessions.completed` or `sessions.failed` |
 
 **How late.** A call whose hangup was lost ends at the first sweep after Asterisk dropped it once it is older than
@@ -183,6 +183,11 @@ from 2.6.x or earlier keeps that history. Code that reads either field no longer
 2. **Dashboards and alerts on `sessions.timed_out` or `sessions.orphaned`.** Delete them: 2.11.0 no longer publishes
    either instrument. A call whose hangup was lost shows up in `sessions.completed` or `sessions.failed`, with
    `Metadata["cause"] == "reload"` and no `HangupCause`; a consumer cannot tell it from a call a reload ended, by design.
+   Since 2.11.0 the marker can also come with a `HangupCause`: a call that was connected and waits in a queue (or is
+   back in `Transferring` after a queue visit that ended unanswered), whose caller's own hangup was seen before the
+   sweep proved its remaining legs gone, ends on that caller's cause (`Completed` on normal clearing, `Failed`
+   otherwise) and is still marked `Metadata["cause"] == "reload"`: the marker says how the call's last departure was
+   learned, not that no hangup was seen.
 3. **Code that reads `TimedOut` or `cause=orphaned` as "the call went too long".** Long calls are no longer cut; read
    `Duration`, `RingingAt` and `ConnectedAt` instead.
 
@@ -244,7 +249,9 @@ no public API is added or removed, but those calls now end.
   for each one, the check a single-server host runs: the candidates are the held calls attached under that server's
   id, older than `DialingTimeout` (60 s by default), holding a channel the server's table holds; when there is one, the
   server receives one `Status`; a call whose channels the completed snapshot omits ends `Completed` if it was answered
-  and `Failed` otherwise, with no `HangupCause` and `Metadata["cause"] == "reload"`, once.
+  and `Failed` otherwise, with no `HangupCause` and `Metadata["cause"] == "reload"`, once (since 2.11.0 a call
+  that was connected and waits in a queue whose caller's own hangup was seen ends on that caller's cause, still
+  marked `reload`; see [what you have to do](#what-you-have-to-do-1)).
 - The servers are verified side by side. One whose verification throws or times out, or that was removed while the
   tick held it, is logged and skipped for that tick — at Error with its id while it is still in the pool, at Debug once
   it has left — and the others are verified. A server that is not connected is skipped (`skipped:not-connected`); the

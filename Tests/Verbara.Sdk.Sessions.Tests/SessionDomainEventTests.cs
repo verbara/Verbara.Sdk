@@ -1,6 +1,8 @@
 using System.Reflection;
 using Verbara.Sdk.Sessions;
 using FluentAssertions;
+using FluentAssertions.Execution;
+using Verbara.Sdk.Enums;
 
 namespace Verbara.Sdk.Sessions.Tests;
 
@@ -42,6 +44,35 @@ public sealed class SessionDomainEventTests
         a.Should().Be(b);
     }
 #pragma warning restore VSDK0009
+
+    [Fact]
+    public void CallEndedEvent_ShouldCarryNoFinalState_WhenBuiltWithThePositionalConstructorAlone()
+    {
+        var at = DateTimeOffset.UnixEpoch;
+        var positional = new CallEndedEvent("s1", "srv-1", at, HangupCause.NormalClearing, TimeSpan.FromSeconds(9),
+            TimeSpan.FromSeconds(4));
+        var completed = positional with { FinalState = CallSessionState.Completed };
+        var failed = positional with { FinalState = CallSessionState.Failed };
+
+        (string, string, DateTimeOffset, HangupCause?, TimeSpan, TimeSpan?) positionalMembers =
+            ("s1", "srv-1", at, HangupCause.NormalClearing, TimeSpan.FromSeconds(9), TimeSpan.FromSeconds(4));
+
+        using var scope = new AssertionScope();
+        positional.FinalState.Should().BeNull("the positional constructor alone sets no final state");
+        completed.FinalState.Should().Be(CallSessionState.Completed, "the final state is set with its init accessor");
+        positional.Should().NotBe(completed, "two endings that differ only by the final state are not equal");
+        completed.Should().NotBe(failed, "two endings that differ only by the final state are not equal");
+        completed.Should().Be(positional with { FinalState = CallSessionState.Completed },
+            "the final state is part of the value");
+        Deconstructed(completed).Should().Be(positionalMembers,
+            "the final state is outside the positional members: Deconstruct is as before");
+    }
+
+    private static (string, string, DateTimeOffset, HangupCause?, TimeSpan, TimeSpan?) Deconstructed(CallEndedEvent e)
+    {
+        var (sessionId, serverId, timestamp, cause, duration, talkTime) = e;
+        return (sessionId, serverId, timestamp, cause, duration, talkTime);
+    }
 
     [Fact]
     public void CallRingNoAnswerEvent_ShouldExposeAllProperties()

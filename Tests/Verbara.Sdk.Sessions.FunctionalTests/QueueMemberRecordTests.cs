@@ -7,9 +7,9 @@ using static Verbara.Sdk.Sessions.FunctionalTests.Infrastructure.QueueFrames;
 namespace Verbara.Sdk.Sessions.FunctionalTests;
 
 /// <summary>
-/// Which member a queue call records as having taken it (<see cref="CallSession.AgentInterface"/>) when more than
-/// one report could name it: a second queue visit, the connect of an agent the SDK knows by name, and the save the
-/// manager makes once the call is connected.
+/// Which member a queue call records (<see cref="CallSession.AgentInterface"/>) when more than one report could name
+/// it: a second queue visit, the connect of an agent the SDK knows by name, and the save the manager makes once the
+/// call is connected. The call records the member of its most recent connection.
 /// </summary>
 /// <remarks>
 /// The frames follow a call Asterisk 22.9.0 sent live (an endpoint member answers the caller in <c>q-pjsip</c> and
@@ -29,11 +29,11 @@ public sealed class QueueMemberRecordTests
 
     /// <summary>
     /// The call is answered in one queue and transferred into another, the shape a transfer to a queue takes. A
-    /// consumer reads the call's member when each visit is announced connected; both announcements name the first
-    /// member, and so does the call once it has ended.
+    /// consumer reads the call's member when each visit is announced connected: the first announcement finds the
+    /// first member, the second the second member, and the call records the second once it has ended.
     /// </summary>
     [Fact]
-    public async Task AgentInterface_ShouldKeepTheFirstMember_WhenTheCallIsAnsweredInOneQueueAndThenInAnother()
+    public async Task AgentInterface_ShouldBeTheSecondMember_WhenTheCallIsAnsweredInOneQueueAndThenInAnother()
     {
         await using var rig = await QueueCallRig.StartAsync();
         var atDelivery = new[]
@@ -60,10 +60,10 @@ public sealed class QueueMemberRecordTests
         using var scope = new AssertionScope();
         rig.Connected.Select(e => e.QueueName).Should().Equal(["q-pjsip", "q-pjsip3"], "premise: each queue connected the call once");
         first.Should().Be(FirstMember, "the first queue connected the call to its member, recorded before the call is announced");
-        second.Should().Be(FirstMember, "the second queue's report does not replace the member the call already records");
+        second.Should().Be(SecondMember, "the second queue's report records the member of the call's most recent connection");
         var call = rig.Manager.GetById(rig.Connected[0].SessionId);
         call.Should().NotBeNull("the manager keeps the ended call");
-        call!.AgentInterface.Should().Be(FirstMember, "the call keeps the first member once it has ended");
+        call!.AgentInterface.Should().Be(SecondMember, "the call keeps the second member once it has ended");
         call.AgentId.Should().BeNull("no known agent took the call");
     }
 
@@ -91,9 +91,9 @@ public sealed class QueueMemberRecordTests
     }
 
     /// <summary>
-    /// Pin of the known agent's exception, green before and after: the first visit is taken by a member the SDK does
-    /// not know by name, the second by a known agent. The known agent's connect writes its own interface on every
-    /// connect, so the call records the agent of the later visit.
+    /// Pin, green before and after: the first visit is taken by a member the SDK does not know by name, the second
+    /// by a known agent. The known agent's connect makes the later connection, so the call records that agent and
+    /// its interface.
     /// </summary>
     [Fact]
     public async Task AgentInterface_ShouldBeTheKnownAgents_WhenAKnownAgentTakesALaterVisit()

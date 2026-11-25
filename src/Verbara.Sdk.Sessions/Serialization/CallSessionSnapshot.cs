@@ -89,6 +89,7 @@ internal sealed class CallSessionSnapshot
         };
 
         session.State = State;
+        session.MarkConnectedWhenInAConnectedState();
         session.Context = Context;
         session.Extension = Extension;
         session.QueueName = QueueName;

@@ -8,6 +8,7 @@ using Verbara.Sdk.Ami.Events;
 using Verbara.Sdk.Ami.Generated;
 using Verbara.Sdk.Ami.Internal;
 using Verbara.Sdk.Live.Server;
+using Verbara.Sdk.Sessions.Extensions;
 using Verbara.Sdk.Sessions.Internal;
 using Verbara.Sdk.Sessions.Manager;
 
@@ -126,6 +127,72 @@ internal static class AmiCaptureReplay
         "queue-ring-no-answer-asterisk-23.6.0.raw",
         "queue-ring-no-answer-asterisk-24.0.0.raw",
     ];
+
+    /// <summary>
+    /// The connected-signal-matrix captures of a plain dial and a re-queued call, one per image (22.12.0, 23.6.0,
+    /// 24.0.0): a call dialed to <c>PJSIP/agent1</c>, which answers (step <c>plain-01</c>), and a call answered in
+    /// <c>q-first</c>, blind-transferred into <c>q-second</c> and answered there (step <c>requeue-01</c>). The
+    /// repeat-connect capture (<c>connected-signal-matrix-repeat-*</c>, 22.12.0 only) and the hang-up captures
+    /// (<see cref="ConnectedSignalMatrixHangupCaptures"/>) come from the same workload.
+    /// </summary>
+    public static readonly IReadOnlyList<string> ConnectedSignalMatrixCaptures =
+    [
+        "connected-signal-matrix-asterisk-22.12.0.raw",
+        "connected-signal-matrix-asterisk-23.6.0.raw",
+        "connected-signal-matrix-asterisk-24.0.0.raw",
+    ];
+
+    /// <summary>
+    /// The connected-signal-matrix captures of a connected call that waits in a later queue, one per image (22.12.0,
+    /// 23.6.0, 24.0.0) and a second 22.12.0 one whose caller hangs up before app_queue hangs up the ringing member's leg:
+    /// a re-queued caller that hangs up waiting in <c>q-second</c> (step <c>requeue-hangup-01</c>), a call answered by a
+    /// plain dial, then queued, that hangs up waiting (step <c>aq-hangup-01</c>), and a call answered in <c>q-first</c>
+    /// and blind-transferred to an extension whose dial answers (step <c>queue-txdial-01</c>).
+    /// </summary>
+    public static readonly IReadOnlyList<string> ConnectedSignalMatrixHangupCaptures =
+    [
+        "connected-signal-matrix-hangup-asterisk-22.12.0.raw",
+        "connected-signal-matrix-hangup-asterisk-23.6.0.raw",
+        "connected-signal-matrix-hangup-asterisk-24.0.0.raw",
+        "connected-signal-matrix-hangup-reversed-asterisk-22.12.0.raw",
+    ];
+
+    /// <summary>
+    /// The connected-signal-matrix capture of two queue visits that end unanswered, on 22.12.0: a call answered by a
+    /// plain dial, then queued in <c>q-tmo</c>, whose timeout releases it to the dialplan, which puts it on hold (step
+    /// <c>aq-timeout-hold-01</c>); and a call that waits in <c>q-tmo</c> first, times out, and is answered by an overflow
+    /// <c>Dial</c> (step <c>q-timeout-dial-01</c>).
+    /// </summary>
+    public const string UnansweredVisitCapture22 = "connected-signal-matrix-unanswered-asterisk-22.12.0.raw";
+
+    /// <summary>
+    /// The connected-signal-matrix capture, on 23.6.0, of a call answered in <c>q-first</c>, blind-transferred into
+    /// <c>q-tmo</c>, whose timeout releases it to the dialplan, which puts it on hold before it hangs up (step
+    /// <c>requeue-timeout-01</c>).
+    /// </summary>
+    public const string UnansweredVisitCapture23 = "connected-signal-matrix-unanswered-asterisk-23.6.0.raw";
+
+    /// <summary>
+    /// The connected-signal-matrix capture, on 24.0.0, of a call answered by a plain dial, then queued in <c>q-tmo</c>,
+    /// whose timeout releases it to the dialplan, which dials another endpoint that answers (step
+    /// <c>aq-timeout-dial-01</c>).
+    /// </summary>
+    public const string UnansweredVisitCapture24 = "connected-signal-matrix-unanswered-asterisk-24.0.0.raw";
+
+    /// <summary>
+    /// The connected-signal-matrix capture of two callers who leave a queue by its exit key, on 22.12.0: a call
+    /// answered by a plain dial, then queued in <c>q-key</c>, whose caller presses the key to the exit context and is
+    /// put on hold there (step <c>aq-key-01</c>); and a call the dialplan answers and queues in <c>q-keyd</c>, whose
+    /// caller presses the key to an exit context that dials an endpoint that answers (step <c>q-key-dial-01</c>).
+    /// </summary>
+    public const string ExitKeyCapture22 = "connected-signal-matrix-key-asterisk-22.12.0.raw";
+
+    /// <summary>
+    /// The connected-signal-matrix capture, on 23.6.0, of a call the dialplan answers and queues in <c>q-keysame</c>,
+    /// whose exit context is the caller's own: the caller presses the key, is put on hold, and hangs up (step
+    /// <c>q-key-samectx-01</c>).
+    /// </summary>
+    public const string ExitKeyCapture23 = "connected-signal-matrix-key-asterisk-23.6.0.raw";
 
     private const string MarkerUserEvent = "N5Marker";
     private const string BeforeFirstMarker = "(before-the-first-marker)";
@@ -298,6 +365,10 @@ internal static class AmiCaptureReplay
                 // the event reads it; the session is mutable, so a read after the replay could not tell.
                 score?.RecordConnected(connected, manager.GetById(connected.SessionId)?.AgentInterface);
                 dispatch?.OnConnected(shape?.Id);
+            }
+            else if (evt is CallQueuedEvent queued)
+            {
+                score?.RecordQueued(queued);
             }
 
             var change = TakeTrackerChange(tracker, trackerSeen);
@@ -1002,6 +1073,13 @@ internal static class AmiCaptureReplay
         public static Task<ReplayRig> StartAsync(SessionOptions options) => StartOnAsync(options, clock: null);
 
         /// <summary>
+        /// As <see cref="StartAsync(SessionOptions)"/>, with the manager saving to <paramref name="store"/>, or to an
+        /// in-memory store when it is <see langword="null"/>.
+        /// </summary>
+        public static Task<ReplayRig> StartAsync(SessionOptions options, SessionStoreBase? store) =>
+            StartOnAsync(options, clock: null, store: store);
+
+        /// <summary>
         /// Starts a rig whose manager runs on <paramref name="clock"/>, through its internal constructor, with
         /// <paramref name="wrapUpDurations"/> when one is given.
         /// </summary>
@@ -1013,7 +1091,7 @@ internal static class AmiCaptureReplay
         }
 
         private static async Task<ReplayRig> StartOnAsync(SessionOptions options, TimeProvider? clock,
-            IWrapUpDurationProvider? wrapUpDurations = null)
+            IWrapUpDurationProvider? wrapUpDurations = null, SessionStoreBase? store = null)
         {
             var connection = Substitute.For<IAmiConnection>();
             connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
@@ -1027,7 +1105,7 @@ internal static class AmiCaptureReplay
                 ? new CallSessionManager(
                     Options.Create(options),
                     NullLogger<CallSessionManager>.Instance,
-                    new InMemorySessionStore())
+                    store ?? new InMemorySessionStore())
                 : new CallSessionManager(
                     Options.Create(options),
                     NullLogger<CallSessionManager>.Instance,
@@ -1234,6 +1312,7 @@ internal readonly record struct QueueCounters(int Offered, int Answered, int Aba
 internal sealed class QueueShapeScore(QueueShape shape)
 {
     private readonly List<CallConnectedEvent> _connected = [];
+    private readonly List<CallQueuedEvent> _queued = [];
     private readonly List<string?> _agentInterfacesAtConnected = [];
     private readonly List<string?> _asteriskConnectInterfaces = [];
     private readonly List<CallSession> _sessions = [];
@@ -1268,6 +1347,12 @@ internal sealed class QueueShapeScore(QueueShape shape)
 
     /// <summary>The <see cref="CallConnectedEvent"/>s the manager published for the shape's calls, in order.</summary>
     public IReadOnlyList<CallConnectedEvent> ConnectedEvents => _connected;
+
+    /// <summary>
+    /// The <see cref="CallQueuedEvent"/>s the manager published for the shape's calls, in order: each carries the
+    /// start of the visit it opens.
+    /// </summary>
+    public IReadOnlyList<CallQueuedEvent> QueuedEvents => _queued;
 
     /// <summary>
     /// For each of <see cref="ConnectedEvents"/>, at the same index, the <see cref="CallSession.AgentInterface"/> of
@@ -1308,6 +1393,8 @@ internal sealed class QueueShapeScore(QueueShape shape)
         _connected.Add(evt);
         _agentInterfacesAtConnected.Add(agentInterfaceAtDelivery);
     }
+
+    internal void RecordQueued(CallQueuedEvent evt) => _queued.Add(evt);
 
     internal void RecordAsteriskConnect(string? memberInterface, bool namesAnAgent)
     {

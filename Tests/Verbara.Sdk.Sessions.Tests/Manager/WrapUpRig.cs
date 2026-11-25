@@ -33,16 +33,19 @@ namespace Verbara.Sdk.Sessions.Tests.Manager;
 internal sealed class WrapUpRig : IAsyncDisposable
 {
     private readonly Dictionary<string, (VerbaraServer Server, IObserver<ManagerEvent> Observer)> _servers;
+    private readonly Dictionary<string, (IAmiConnection Connection, LoadCounter Loads)> _connections;
     private readonly List<SessionDomainEvent> _events = [];
     private readonly Lock _eventsGate = new();
     private readonly IDisposable _subscription;
     private bool _managerDisposed;
 
     private WrapUpRig(CallSessionManager manager,
-        Dictionary<string, (VerbaraServer Server, IObserver<ManagerEvent> Observer)> servers)
+        Dictionary<string, (VerbaraServer Server, IObserver<ManagerEvent> Observer)> servers,
+        Dictionary<string, (IAmiConnection Connection, LoadCounter Loads)> connections)
     {
         Manager = manager;
         _servers = servers;
+        _connections = connections;
         _subscription = manager.Events.Subscribe(new Recorder(this));
     }
 
@@ -88,6 +91,7 @@ internal sealed class WrapUpRig : IAsyncDisposable
         var manager = new CallSessionManager(Options.Create(options ?? new SessionOptions()),
             logger ?? NullLogger<CallSessionManager>.Instance, new InMemorySessionStore(), clock, wrapUpDurations);
         var servers = new Dictionary<string, (VerbaraServer, IObserver<ManagerEvent>)>(StringComparer.Ordinal);
+        var connections = new Dictionary<string, (IAmiConnection, LoadCounter)>(StringComparer.Ordinal);
         try
         {
             foreach (var serverId in serverIds)
@@ -100,14 +104,16 @@ internal sealed class WrapUpRig : IAsyncDisposable
                 connection.Subscribe(Arg.Do<IObserver<ManagerEvent>>(o => observer = o))
                     .Returns(Substitute.For<IDisposable>());
 
-                var server = new VerbaraServer(connection, NullLogger<VerbaraServer>.Instance);
+                var loads = new LoadCounter();
+                var server = new VerbaraServer(connection, loads);
                 manager.AttachToServer(server, serverId);
                 await server.StartAsync();
+                connections[serverId] = (connection, loads);
                 servers[serverId] = (server, observer
                     ?? throw new InvalidOperationException("VerbaraServer.StartAsync subscribed no event observer."));
             }
 
-            return new WrapUpRig(manager, servers);
+            return new WrapUpRig(manager, servers, connections);
         }
         catch
         {
@@ -127,6 +133,27 @@ internal sealed class WrapUpRig : IAsyncDisposable
         var observer = _servers[serverId].Observer;
         foreach (var frame in frames)
             observer.OnNext(frame);
+    }
+
+    /// <summary>
+    /// The default server's AMI link drops and comes back: raises the connection's <c>Reconnected</c>, whose reload reads
+    /// <paramref name="status"/> as the <c>Status</c> answer, <paramref name="queueStatus"/> as the <c>QueueStatus</c>
+    /// answer and nothing for every other list, and waits for that reload's <c>State loaded</c>. Every frame delivered
+    /// after it carries the next event-loss epoch.
+    /// </summary>
+    public async Task ReconnectAsync(ManagerEvent[] status, ManagerEvent[] queueStatus)
+    {
+        var (connection, loads) = _connections[WrapUpFrames.ServerId];
+        connection.SendEventGeneratingActionAsync(Arg.Any<ManagerAction>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<ManagerAction>() switch
+            {
+                StatusAction => Answer(status),
+                QueueStatusAction => Answer(queueStatus),
+                _ => NoEvents(),
+            });
+        var loaded = loads.Next();
+        connection.Reconnected += Raise.Event<Action>();
+        await loaded.WaitAsync(TimeSpan.FromSeconds(10));
     }
 
     /// <summary>The session the manager holds for <paramref name="linkedId"/>; throws when it holds none.</summary>
@@ -154,6 +181,38 @@ internal sealed class WrapUpRig : IAsyncDisposable
     {
         await Task.CompletedTask;
         yield break;
+    }
+
+    private static async IAsyncEnumerable<ManagerEvent> Answer(ManagerEvent[] frames)
+    {
+        await Task.CompletedTask;
+        foreach (var frame in frames)
+            yield return frame;
+    }
+
+    /// <summary>The server's logger: discards everything, and completes <see cref="Next"/> on its next state load.</summary>
+    private sealed class LoadCounter : ILogger<VerbaraServer>
+    {
+        private TaskCompletionSource _next = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Completes when the server next logs <c>[LIVE] State loaded</c>.</summary>
+        public Task Next()
+        {
+            var next = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            Volatile.Write(ref _next, next);
+            return next.Task;
+        }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (formatter(state, exception).StartsWith("[LIVE] State loaded", StringComparison.Ordinal))
+                Volatile.Read(ref _next).TrySetResult();
+        }
     }
 
     private sealed class Recorder(WrapUpRig rig) : IObserver<SessionDomainEvent>
@@ -351,16 +410,24 @@ internal static class WrapUpFrames
 
     /// <summary>
     /// A call outside any queue that <paramref name="agent"/>, known by name, takes on <paramref name="member"/>: the
-    /// caller's channel rings, the agent's leg answers, the connect names the agent, and both legs enter one bridge.
-    /// The manager never saw the caller join a queue, so the call has no queue.
+    /// caller's channel dials the agent's leg, the connect naming the agent connects the call, the agent's leg is then
+    /// reported answered, and both legs enter one bridge. The manager never saw the caller join a queue, so the call
+    /// has no queue. The connect comes before the leg's answer because a call is announced by the report that connects
+    /// it: a leg's answer reported first would connect the call naming no agent, and the connect would find it
+    /// connected. No capture holds an <c>AgentConnect</c> naming an agent, so the order is the frames' choice.
     /// </summary>
     public static ManagerEvent[] NamedAgentCallConnected(string caller, string agentLeg, string member, string agent) =>
     [
         NewChannel(caller, CallerChannel(caller), "Down", caller, context: "from-trunk", exten: "600"),
         NewState(caller, "Ring"),
         NewChannel(agentLeg, MemberChannel(member, agentLeg), "Down", caller, context: "agents"),
-        NewState(agentLeg, "Up"),
+        new DialBeginEvent
+        {
+            EventType = "DialBegin", UniqueId = caller, Channel = CallerChannel(caller), DestUniqueid = agentLeg,
+            DestChannel = MemberChannel(member, agentLeg), DialString = member,
+        },
         AgentConnect("", caller, CallerChannel(caller), caller, member, agentLeg, MemberChannel(member, agentLeg), agent),
+        NewState(agentLeg, "Up"),
         NewState(caller, "Up"),
         BridgeCreate(Bridge(caller)),
         BridgeEnter(Bridge(caller), agentLeg),
