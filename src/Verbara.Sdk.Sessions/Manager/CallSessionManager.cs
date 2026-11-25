@@ -2034,7 +2034,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 Step(HandlerStep.RegistrationLegClaimed, session.ServerId, participant.UniqueId);
             }
 
-            // The call becomes an accepted registration only after every leg claim has succeeded.
+            // The call becomes an accepted registration only after every leg claim has succeeded. One registered in a
+            // state only a connection reaches was connected, as a session restored from its snapshot is.
+            session.MarkConnectedWhenInAConnectedState();
             session.Unverified = true;
             session.AttachmentGeneration = attachment?.Generation ?? 0;
             if (session.BridgeId is not null

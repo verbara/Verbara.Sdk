@@ -243,11 +243,24 @@ public sealed class CallSession
     /// Whether this call was ever connected: it entered <see cref="CallSessionState.Connected"/> by a transition, or a
     /// reload or an admission opened it there, or it was restored connected or with a connected time. An answer
     /// recorded while the call was in its initial state (<see cref="AnsweredInInitialStateAt"/>) is not a connection
-    /// and does not set it. Not persisted; nothing clears it. Read under <see cref="SyncRoot"/>.
+    /// and does not set it. A call restored from its snapshot or registered reconstructed in a state only a connection
+    /// reaches has it set too. Not persisted; nothing clears it. Read under <see cref="SyncRoot"/>.
     /// </summary>
     internal bool HasBeenConnected => (_endingFlags & ConnectedFlag) != 0 || ConnectedAt.HasValue;
 
     internal void MarkConnected() => _endingFlags |= ConnectedFlag;
+
+    /// <summary>
+    /// Marks the call as having been connected when its current state is one only a connection reaches (connected, on
+    /// hold, transferring or in a conference): the rule for a call this manager did not watch connect, restored from its
+    /// snapshot or registered reconstructed.
+    /// </summary>
+    internal void MarkConnectedWhenInAConnectedState()
+    {
+        if (State is CallSessionState.Connected or CallSessionState.OnHold or CallSessionState.Transferring
+            or CallSessionState.Conference)
+            MarkConnected();
+    }
 
     /// <summary>
     /// The cause Asterisk reported on the hang-up of the caller's own channel (the call's first participant, the leg the
