@@ -155,6 +155,26 @@ public class SnapshotSerializationTests
     }
 
     [Fact]
+    public void ToSession_ShouldRestoreACallThatWasConnected_WhenTheSnapshotIsConnectedWithNoConnectedTime()
+    {
+        // A call a reload opened connected is saved connected with no connected time of its own.
+        var saved = new CallSession("sess-002", "linked-002", "server-1", CallDirection.Inbound)
+        {
+            CreatedAt = new DateTimeOffset(2026, 3, 17, 10, 0, 0, TimeSpan.Zero),
+        };
+        saved.State = CallSessionState.Connected;
+
+        var restored = CallSessionSnapshot.FromSession(saved).ToSession();
+        var joined = restored.TryTransition(CallSessionState.Queued);
+
+        (restored.ConnectedAt, joined).Should().Be(((DateTimeOffset?)null, true),
+            "premise: the restored call has no connected time and can join a queue");
+        restored.TryCompleteConnectedWhileWaiting().Should().BeTrue(
+            "the restored call was connected, so when it is over while waiting in a later queue it ends completed");
+        restored.State.Should().Be(CallSessionState.Completed);
+    }
+
+    [Fact]
     public void FullRoundtrip_ShouldPreserveAllFields_WhenSessionToSnapshotToJsonToSnapshotToSession()
     {
         var original = CreateTestSession();
