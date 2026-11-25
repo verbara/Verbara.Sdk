@@ -127,6 +127,35 @@ internal static class AmiCaptureReplay
         "queue-ring-no-answer-asterisk-24.0.0.raw",
     ];
 
+    /// <summary>
+    /// The connected-signal-matrix captures of a plain dial and a re-queued call, one per image (22.12.0, 23.6.0,
+    /// 24.0.0): a call dialed to <c>PJSIP/agent1</c>, which answers (step <c>plain-01</c>), and a call answered in
+    /// <c>q-first</c>, blind-transferred into <c>q-second</c> and answered there (step <c>requeue-01</c>). The
+    /// repeat-connect capture (<c>connected-signal-matrix-repeat-*</c>, 22.12.0 only) and the hang-up captures
+    /// (<see cref="ConnectedSignalMatrixHangupCaptures"/>) come from the same workload.
+    /// </summary>
+    public static readonly IReadOnlyList<string> ConnectedSignalMatrixCaptures =
+    [
+        "connected-signal-matrix-asterisk-22.12.0.raw",
+        "connected-signal-matrix-asterisk-23.6.0.raw",
+        "connected-signal-matrix-asterisk-24.0.0.raw",
+    ];
+
+    /// <summary>
+    /// The connected-signal-matrix captures of a connected call that waits in a later queue, one per image (22.12.0,
+    /// 23.6.0, 24.0.0) and a second 22.12.0 one whose caller hangs up before app_queue hangs up the ringing member's leg:
+    /// a re-queued caller that hangs up waiting in <c>q-second</c> (step <c>requeue-hangup-01</c>), a call answered by a
+    /// plain dial, then queued, that hangs up waiting (step <c>aq-hangup-01</c>), and a call answered in <c>q-first</c>
+    /// and blind-transferred to an extension whose dial answers (step <c>queue-txdial-01</c>).
+    /// </summary>
+    public static readonly IReadOnlyList<string> ConnectedSignalMatrixHangupCaptures =
+    [
+        "connected-signal-matrix-hangup-asterisk-22.12.0.raw",
+        "connected-signal-matrix-hangup-asterisk-23.6.0.raw",
+        "connected-signal-matrix-hangup-asterisk-24.0.0.raw",
+        "connected-signal-matrix-hangup-reversed-asterisk-22.12.0.raw",
+    ];
+
     private const string MarkerUserEvent = "N5Marker";
     private const string BeforeFirstMarker = "(before-the-first-marker)";
 
