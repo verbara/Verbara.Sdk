@@ -68,6 +68,48 @@ public sealed class CallSessionManagerConnectedMemberTests
             "a call outside any queue is announced by the agent's connect, which names the agent's interface");
     }
 
+    /// <summary>
+    /// The connect of an agent known by name that finds the call already connected: the agent's leg is reported
+    /// answered before the connect, the order Asterisk sends a leg's answer and app_queue's connect report in. The leg's
+    /// answer made the connection and announced it with no agent; the connect that follows makes none, so it records
+    /// no agent, and the call says what its one announcement said. The frames are synthetic: no capture holds an
+    /// <c>AgentConnect</c> naming an agent.
+    /// </summary>
+    [Fact]
+    public async Task AgentConnected_ShouldRecordNoAgent_WhenAKnownAgentsConnectFindsTheCallAlreadyConnectedByItsLegsAnswer()
+    {
+        await using var rig = await WrapUpRig.StartAsync(new FakeTimeProvider());
+        rig.Deliver(AgentLogin("agent-4", "PJSIP/agent4", "login-4"));
+        rig.Deliver(
+            NewChannel("n1", CallerChannel("n1"), "Down", "n1", context: "from-trunk", exten: "600"),
+            NewState("n1", "Ring"),
+            NewChannel("nm1", MemberChannel("PJSIP/agent4", "nm1"), "Down", "n1", context: "agents"),
+            new DialBeginEvent
+            {
+                EventType = "DialBegin", UniqueId = "n1", Channel = CallerChannel("n1"), DestUniqueid = "nm1",
+                DestChannel = MemberChannel("PJSIP/agent4", "nm1"), DialString = "PJSIP/agent4",
+            },
+            NewState("nm1", "Up"));
+        var session = rig.Session("n1");
+        var beforeConnect = session.State;
+        rig.Deliver(
+            AgentConnect("", "n1", CallerChannel("n1"), "n1", "PJSIP/agent4", "nm1", MemberChannel("PJSIP/agent4", "nm1"),
+                "agent-4"),
+            NewState("n1", "Up"),
+            BridgeCreate(Bridge("n1")),
+            BridgeEnter(Bridge("n1"), "nm1"),
+            BridgeEnter(Bridge("n1"), "n1"));
+
+        var connected = rig.Events.OfType<CallConnectedEvent>().Where(e => e.SessionId == session.SessionId).ToList();
+
+        beforeConnect.Should().Be(CallSessionState.Connected, "premise: the leg's answer connected the call");
+        connected.Should().ContainSingle("only the leg's answer made a connection")
+            .Which.AgentId.Should().BeNull("the leg's answer names no agent");
+        (session.AgentId, session.AgentInterface).Should().Be((connected[0].AgentId, connected[0].AgentInterface),
+            "a connect that makes no connection records neither its agent nor its interface, so the call says what its "
+            + "one announcement said");
+    }
+
     [Fact]
     public async Task BridgeEntered_ShouldNameNoMember_WhenACallThatNeverJoinedAQueueConnectsAgainAfterATransfer()
     {
