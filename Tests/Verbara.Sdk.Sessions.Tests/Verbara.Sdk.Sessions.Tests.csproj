@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Compile Include="..\Shared\Sessions\SessionIndexInvariant.cs" Link="Shared\Sessions\SessionIndexInvariant.cs" />
+    <Compile Include="..\Shared\Sessions\InstanceIdentityNames.cs" Link="Shared\Sessions\InstanceIdentityNames.cs" />
     <Compile Include="..\Shared\Sessions\StepParker.cs" Link="Shared\Sessions\StepParker.cs" />
     <Compile Include="..\Shared\Threading\ThreadHold.cs" Link="Shared\Threading\ThreadHold.cs" />
     <Using Include="Verbara.Sdk.Tests.Shared.Threading" />

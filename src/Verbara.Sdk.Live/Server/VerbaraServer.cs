@@ -408,6 +408,15 @@ public sealed class VerbaraServer : IVerbaraServer
     }
 
     /// <summary>
+    /// The instance's <c>SystemName</c> as the login of the AMI session <paramref name="mark"/> names read it, for the
+    /// session engine: <see langword="null"/> when that read gave none, when the mark is not this connection instance's,
+    /// and over a connection that is not the SDK's <see cref="AmiConnection"/>. Keyed by the mark's session, never the
+    /// connection's current one, so an event of a lost session delivered after the next login keeps the lost session's.
+    /// </summary>
+    internal string? ReadSystemName(SessionLossMark mark) =>
+        _connection is AmiConnection ami && ami.Incarnation == mark.ConnectionId ? ami.SystemNameOf(mark.Session) : null;
+
+    /// <summary>
     /// The connection's loss mark at the position its delivery has applied: the mark of the event whose observers all
     /// returned last (see <c>AmiConnection.AppliedLossMark</c>), the same inside a delivery as outside it.
     /// <see langword="null"/> when the connection is not the SDK's <see cref="AmiConnection"/>.

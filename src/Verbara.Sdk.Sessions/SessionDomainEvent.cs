@@ -4,8 +4,9 @@ namespace Verbara.Sdk.Sessions;
 
 public abstract record SessionDomainEvent(string SessionId, string ServerId, DateTimeOffset Timestamp)
 {
-    // Written once by the session engine before any subscriber sees the notification, without a copy of the record.
+    // Both written once by the session engine before any subscriber sees the notification, without a copy of the record.
     private SessionEventEpoch? _epoch;
+    private AsteriskInstanceIdentity? _instance;
 
     /// <summary>
     /// The loss mark of the notification's own server at the point the notification reflects: compare it with another
@@ -27,7 +28,42 @@ public abstract record SessionDomainEvent(string SessionId, string ServerId, Dat
     /// </remarks>
     public SessionEventEpoch? Epoch { get => _epoch; init => _epoch = value; }
 
-    internal void StampEpoch(SessionEventEpoch? epoch) => _epoch = epoch;
+    /// <summary>
+    /// The Asterisk instance the notification came from, as it named itself (its <c>systemname</c>), or
+    /// <see langword="null"/> when the session engine does not know it: null means unknown, never an instance, so two
+    /// notifications that both carry null are not known to come from the same instance. It is added beside
+    /// <see cref="ServerId"/>, which is unchanged and stays the key the host gave the server. Set by the session engine
+    /// before any subscriber receives the notification, together with <see cref="Epoch"/>, and never changed after.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The engine reads it once per AMI session, at the login, from the <c>CoreSettings</c> response the connection
+    /// already requests there, and stamps every notification with the identity read for the AMI session its own
+    /// <see cref="Epoch"/> names: a notification of a lost session delivered after the next login keeps the lost
+    /// session's identity, and a reconnect to an instance that now names itself otherwise shows on the notifications
+    /// after it. It is <see langword="null"/> for the whole AMI session when that read gave nothing (no
+    /// <c>systemname</c> set, <c>CoreSettings</c> refused to the AMI user, or the read failed), never the previous
+    /// session's value; and whenever <see cref="Epoch"/> is <see langword="null"/>, since such a notification names no AMI
+    /// session. An agent state change carries the identity of the notification that caused it.
+    /// </para>
+    /// <para>
+    /// Not a positional member: a notification built with the positional constructor alone names no instance. The
+    /// identity is part of the notification's value: two notifications that differ only by it are not equal.
+    /// </para>
+    /// <para>
+    /// Do not compare two <see langword="null"/> identities as one instance: <see langword="null"/> equals
+    /// <see langword="null"/> in C#, but two unknown instances may be one Asterisk or two. Only two non-null identities
+    /// that are equal name the same instance.
+    /// </para>
+    /// </remarks>
+    public AsteriskInstanceIdentity? Instance { get => _instance; init => _instance = value; }
+
+    /// <summary>Seals the loss mark and the instance identity, once, before any subscriber sees the notification.</summary>
+    internal void Seal(SessionEventEpoch? epoch, AsteriskInstanceIdentity? instance)
+    {
+        _epoch = epoch;
+        _instance = instance;
+    }
 }
 
 /// <summary>

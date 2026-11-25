@@ -75,6 +75,9 @@ namespace Verbara.Sdk.Ami.Tests.Connection;
 /// <c>AmiConnection.AppliedLossMark</c>, each an <see cref="AmiEventLossMark"/> (since 2.10.0);
 /// </description></item>
 /// <item><description>
+/// <c>AmiConnection.SystemNameOf(long)</c>, a nullable <see cref="string"/> (since 2.11.0);
+/// </description></item>
+/// <item><description>
 /// <c>AmiConnection.StateAndWriter</c>, a tuple of <see cref="AmiConnectionState"/> and <see cref="bool"/>;
 /// </description></item>
 /// <item><description>
@@ -171,6 +174,9 @@ public sealed class AmiInternalsUsedByLiveTests
         var appliedLossMark = connection.AppliedLossMark;
         Exactly<AmiEventLossMark>(ref appliedLossMark);
 
+        // AmiConnection.SystemNameOf: bound by its exact parameter and return type.
+        Func<long, string?> systemNameOf = connection.SystemNameOf;
+
         // new ListSnapshotMark(), its CompleteOrdinal and its wait, and the overload that fills it; bound only.
         var mark = new ListSnapshotMark();
         var completeOrdinal = mark.CompleteOrdinal;
@@ -214,6 +220,7 @@ public sealed class AmiInternalsUsedByLiveTests
         {
             send.Should().NotBeNull("the overload binds to the delegate Live's call site needs");
             sendWithin.Should().NotBeNull("the overload binds to the delegate OriginateAsync's call site needs");
+            systemNameOf.Should().NotBeNull("the lookup binds to the delegate Live's identity read needs");
             onLost.Should().NotBeNull("the event takes the handler type Live's call site declares");
             onCallerReconnected.Should().NotBeNull("the event takes the handler type Live's call site declares");
             onReconnectSettled.Should().NotBeNull("the event takes the handler type Live's call site declares");

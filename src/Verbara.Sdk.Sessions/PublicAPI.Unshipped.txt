@@ -9,3 +9,15 @@ Verbara.Sdk.Sessions.CallRingNoAnswerEvent.AgentInterface.get -> string?
 Verbara.Sdk.Sessions.CallRingNoAnswerEvent.AgentInterface.init -> void
 Verbara.Sdk.Sessions.CallEndedEvent.FinalState.get -> Verbara.Sdk.Sessions.CallSessionState?
 Verbara.Sdk.Sessions.CallEndedEvent.FinalState.init -> void
+Verbara.Sdk.Sessions.AsteriskInstanceIdentity
+Verbara.Sdk.Sessions.AsteriskInstanceIdentity.<Clone>$() -> Verbara.Sdk.Sessions.AsteriskInstanceIdentity!
+Verbara.Sdk.Sessions.AsteriskInstanceIdentity.AsteriskInstanceIdentity(string! systemName) -> void
+Verbara.Sdk.Sessions.AsteriskInstanceIdentity.Equals(Verbara.Sdk.Sessions.AsteriskInstanceIdentity? other) -> bool
+Verbara.Sdk.Sessions.AsteriskInstanceIdentity.SystemName.get -> string!
+Verbara.Sdk.Sessions.SessionDomainEvent.Instance.get -> Verbara.Sdk.Sessions.AsteriskInstanceIdentity?
+Verbara.Sdk.Sessions.SessionDomainEvent.Instance.init -> void
+override Verbara.Sdk.Sessions.AsteriskInstanceIdentity.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.AsteriskInstanceIdentity.GetHashCode() -> int
+override Verbara.Sdk.Sessions.AsteriskInstanceIdentity.ToString() -> string!
+static Verbara.Sdk.Sessions.AsteriskInstanceIdentity.operator !=(Verbara.Sdk.Sessions.AsteriskInstanceIdentity? left, Verbara.Sdk.Sessions.AsteriskInstanceIdentity? right) -> bool
+static Verbara.Sdk.Sessions.AsteriskInstanceIdentity.operator ==(Verbara.Sdk.Sessions.AsteriskInstanceIdentity? left, Verbara.Sdk.Sessions.AsteriskInstanceIdentity? right) -> bool
