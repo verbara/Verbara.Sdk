@@ -471,8 +471,29 @@ public sealed class CallSession
             return false;
 
         State = before;
+        if (before == CallSessionState.Transferring)
+            TransferringAfterUnansweredVisit = true;
         return true;
     }
+
+    /// <summary>
+    /// Whether the call is back in <see cref="CallSessionState.Transferring"/> after a queue visit that ended unanswered
+    /// and nobody has answered it since: transferred, alone, and not yet with anyone. Until then its ending follows the
+    /// cause of the channel that waited in the queue, as a connected call's that hangs up waiting in a queue does
+    /// (<see cref="TryCompleteConnectedWhileWaiting"/>). Set by <see cref="TryReturnFromUnansweredVisit"/>, cleared by
+    /// the call's next connection. Written only under <see cref="SyncRoot"/>; not persisted.
+    /// </summary>
+    internal bool TransferringAfterUnansweredVisit { get; set; }
+
+    /// <summary>
+    /// Whether the call's ending is decided by the cause of the channel that waited in a queue: it was connected and
+    /// waits in <see cref="CallSessionState.Queued"/>, or it is back in <see cref="CallSessionState.Transferring"/> after
+    /// an unanswered visit and nobody has answered it since (<see cref="TransferringAfterUnansweredVisit"/>). Read under
+    /// <see cref="SyncRoot"/>.
+    /// </summary>
+    internal bool EndsOnWaitingCallersCause => HasBeenConnected
+        && (State == CallSessionState.Queued
+            || (State == CallSessionState.Transferring && TransferringAfterUnansweredVisit));
 
     /// <summary>
     /// The legs of this call that an agent or a queue member took and that the manager still counts as connected
@@ -604,22 +625,24 @@ public sealed class CallSession
 
     /// <summary>
     /// Ends, as <see cref="CallSessionState.Completed"/>, a call that was connected and is over while it waits in a later
-    /// queue (<see cref="CallSessionState.Queued"/>): the caller hung up normally, or a reload proved its channels gone,
-    /// before any member answered. Returns <c>true</c> if it did; otherwise it changes nothing and returns <c>false</c>.
+    /// queue (<see cref="CallSessionState.Queued"/>), or while it is back in <see cref="CallSessionState.Transferring"/>
+    /// after that queue's visit ended unanswered and nobody has answered it since: the caller hung up normally, or a
+    /// reload proved its channels gone, before anyone answered. Returns <c>true</c> if it did; otherwise it changes
+    /// nothing and returns <c>false</c>.
     /// <para>
     /// This is not a transition and deliberately does not go through <see cref="TryTransition"/>.
-    /// <see cref="CallSessionStateTransitions"/> lets <see cref="CallSessionState.Queued"/> end only as <c>Failed</c>,
-    /// which is right for a call abandoned in the queue before it ever connected, a call the dialplan answered included;
-    /// adding <c>Queued → Completed</c> to the table would end those completed too. A call that was connected took
-    /// place, so the outcome is decided here, at the ending. It acts only on a session that is still
-    /// <see cref="CallSessionState.Queued"/> and <see cref="HasBeenConnected"/>; <see cref="ConnectedAt"/> is left as it
-    /// is, and <see cref="CompletedAt"/> takes the current time unless it already holds one. Called under
-    /// <see cref="SyncRoot"/>.
+    /// <see cref="CallSessionStateTransitions"/> lets <see cref="CallSessionState.Queued"/> and
+    /// <see cref="CallSessionState.Transferring"/> end only as <c>Failed</c>, which is right for a call abandoned in the
+    /// queue before it ever connected, a call the dialplan answered included; adding <c>Queued → Completed</c> or
+    /// <c>Transferring → Completed</c> to the table would end those, and every transfer that goes nowhere, completed too.
+    /// A call that was connected took place, so the outcome is decided here, at the ending. It acts only on a session for
+    /// which <see cref="EndsOnWaitingCallersCause"/> holds; <see cref="ConnectedAt"/> is left as it is, and
+    /// <see cref="CompletedAt"/> takes the current time unless it already holds one. Called under <see cref="SyncRoot"/>.
     /// </para>
     /// </summary>
     internal bool TryCompleteConnectedWhileWaiting()
     {
-        if (State != CallSessionState.Queued || !HasBeenConnected)
+        if (!EndsOnWaitingCallersCause)
             return false;
 
         State = CallSessionState.Completed;

@@ -1142,7 +1142,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         // after the caller's own hang-up was observed: only a call whose caller's hang-up was not observed ends by the
         // reload, with no cause. Every other call keeps the last departure's cause. Which cause decides the ending does
         // not change how its last departure was learned: a reload that proved the remaining legs gone still marks it.
-        var endsWhileWaiting = session.State == CallSessionState.Queued && session.HasBeenConnected;
+        // A call back in transferring after a queue visit that ended unanswered, and that nobody has answered since,
+        // ends the same way: the channel that waited in the queue is still the one waiting.
+        var endsWhileWaiting = session.EndsOnWaitingCallersCause;
         if (endsWhileWaiting && session.CallerHangupCause is { } callersOwn)
         {
             if (byReload)
@@ -1165,7 +1167,9 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             // observed its answer while it was still in its initial state, with no dial or
             // queue reaching it (an IVR, an originate answered with no dial onward): that one
             // ends completed from its observed answer. Transferring is deliberately absent —
-            // it has no valid transition to Completed — and falls to the Failed arm below.
+            // it has no valid transition to Completed — and falls to the Failed arm below, unless
+            // it is back there after a queue visit that ended unanswered and nobody has answered
+            // it since: that one ends completed, as a connected call waiting in a queue does.
             if (!session.TryCompleteAnsweredInInitialState() && !session.TryCompleteConnectedWhileWaiting())
             {
                 var reloadTarget = session.State is CallSessionState.Connected
@@ -1196,7 +1200,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             }
             else if (endsWhileWaiting)
             {
-                // Queued ends only Failed by the table; a call that was connected ends completed on a normal clearing.
+                // Queued and transferring end only Failed by the table; a call that was connected ends completed on a
+                // normal clearing of the waiting channel.
                 if (targetState != CallSessionState.Completed || !session.TryCompleteConnectedWhileWaiting())
                     session.TryTransition(CallSessionState.Failed);
             }
@@ -1389,6 +1394,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             var transferredAt = _timeProvider.GetUtcNow();
             if (session.TryTransition(CallSessionState.Transferring))
             {
+                // A new transfer, not the return from an unanswered queue visit.
+                session.TransferringAfterUnansweredVisit = false;
                 session.TransferringAt = transferredAt;
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                     CallSessionEventType.Transfer, null, info.TargetChannel, info.TransferType));
@@ -1805,6 +1812,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
 
         var connectedAt = _timeProvider.GetUtcNow();
         session.ConnectedAt ??= connectedAt;
+        session.TransferringAfterUnansweredVisit = false;
         var answersAVisit = enteredFrom is CallSessionState.Queued;
         DateTimeOffset? waitedFrom = enteredFrom switch
         {
