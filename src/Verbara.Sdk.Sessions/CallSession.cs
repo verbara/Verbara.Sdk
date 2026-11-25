@@ -15,12 +15,22 @@ public sealed class CallSession
     internal TimeSpan _accumulatedHoldTime;
 
     public CallSession(string sessionId, string linkedId, string serverId, CallDirection direction)
+        : this(sessionId, linkedId, serverId, direction, DateTimeOffset.UtcNow)
+    {
+    }
+
+    /// <summary>
+    /// A session opened at <paramref name="createdAt"/>: the session engine passes its own clock's reading, so opening a
+    /// call reads one clock once.
+    /// </summary>
+    internal CallSession(string sessionId, string linkedId, string serverId, CallDirection direction,
+        DateTimeOffset createdAt)
     {
         SessionId = sessionId;
         LinkedId = linkedId;
         ServerId = serverId;
         Direction = direction;
-        CreatedAt = DateTimeOffset.UtcNow;
+        CreatedAt = createdAt;
     }
 
     // Identity
@@ -174,6 +184,26 @@ public sealed class CallSession
         internal HashSet<(string Id, long Mark)>? RecordedDepartures;
     }
 
+    // The state only a queue visit, a transfer or a hold writes: allocated by the first write of a value other than
+    // its default, so a call that never queues, transfers or holds carries one null reference for all of it and its
+    // arrival allocates nothing more. A read of an unallocated one is the default (null or false). Read and written
+    // under SyncRoot.
+    private EpisodeState? _episode;
+
+    private sealed class EpisodeState
+    {
+        internal DateTimeOffset? TransferringAt;
+        internal CallSessionState? StateBeforeQueueVisit;
+        internal QueueDialplanLocation? QueueVisitJoinLocation;
+        internal string? HoldChannelUniqueId;
+        internal bool QueueVisitEndedUnanswered;
+        internal bool AwaitingAnswerAfterUnansweredVisit;
+        internal bool TransferringAfterUnansweredVisit;
+    }
+
+    /// <summary>The episode state to write a value other than the default into, allocated on first use.</summary>
+    private EpisodeState Episode => _episode ??= new();
+
     internal bool Unverified
     {
         get => (_endingFlags & UnverifiedFlag) != 0;
@@ -209,9 +239,14 @@ public sealed class CallSession
     /// </summary>
     internal void SetParticipantMark(string id, long mark)
     {
-        if (_participants.Count == 0 || IsCaller(id))
+        // IsCaller(id), with the first-participant comparison made once for both uses.
+        var first = _participants.Count == 0 || IsFirstParticipant(id);
+        if (_participants.Count == 0
+            || (QueueVisitCallerUniqueId is { } visitCaller
+                ? string.Equals(visitCaller, id, StringComparison.Ordinal)
+                : first))
             ClearCallerHangup();
-        if (_participants.Count == 0 || IsFirstParticipant(id))
+        if (first)
         {
             PreserveRecordedFirstMark(mark);
             _firstParticipantMark = mark;
@@ -378,7 +413,15 @@ public sealed class CallSession
     /// transfer waits from it. <c>null</c> when the manager never saw the call become transferring, as for a session
     /// restored from a snapshot. Written only under <see cref="SyncRoot"/>; not persisted.
     /// </summary>
-    internal DateTimeOffset? TransferringAt { get; set; }
+    internal DateTimeOffset? TransferringAt
+    {
+        get => _episode?.TransferringAt;
+        set
+        {
+            if (value is not null || _episode is not null)
+                Episode.TransferringAt = value;
+        }
+    }
 
     /// <summary>
     /// Whether Asterisk has reported the caller leaving the current visit's queue (a
@@ -442,7 +485,15 @@ public sealed class CallSession
     /// queue the dialplan runs right after an unanswered one). <see langword="null"/> for a call the manager never saw
     /// join from another state. Written only under <see cref="SyncRoot"/>; not persisted.
     /// </summary>
-    internal CallSessionState? StateBeforeQueueVisit { get; set; }
+    internal CallSessionState? StateBeforeQueueVisit
+    {
+        get => _episode?.StateBeforeQueueVisit;
+        set
+        {
+            if (value is not null || _episode is not null)
+                Episode.StateBeforeQueueVisit = value;
+        }
+    }
 
     /// <summary>
     /// Where in the dialplan the caller stood when the join that opened the current visit was reported: its
@@ -450,7 +501,15 @@ public sealed class CallSession
     /// queue snapshot opened it) or whose join lacked any of the three. Set at each visit the manager opens. Written
     /// only under <see cref="SyncRoot"/>; not persisted.
     /// </summary>
-    internal QueueDialplanLocation? QueueVisitJoinLocation { get; set; }
+    internal QueueDialplanLocation? QueueVisitJoinLocation
+    {
+        get => _episode?.QueueVisitJoinLocation;
+        set
+        {
+            if (value is not null || _episode is not null)
+                Episode.QueueVisitJoinLocation = value;
+        }
+    }
 
     /// <summary>
     /// Whether the current visit ended unanswered and the call has not returned from it yet, while the call waited in
@@ -460,7 +519,15 @@ public sealed class CallSession
     /// leaves by the queue's exit key. Set at that leave, cleared at the return and at each visit the manager opens.
     /// Written only under <see cref="SyncRoot"/>; not persisted.
     /// </summary>
-    internal bool QueueVisitEndedUnanswered { get; set; }
+    internal bool QueueVisitEndedUnanswered
+    {
+        get => _episode is { QueueVisitEndedUnanswered: true };
+        set
+        {
+            if (value || _episode is not null)
+                Episode.QueueVisitEndedUnanswered = value;
+        }
+    }
 
     /// <summary>
     /// Returns the call, waiting in <see cref="CallSessionState.Queued"/> after a visit that ended unanswered
@@ -502,7 +569,15 @@ public sealed class CallSession
     /// <see cref="TryReturnFromUnansweredVisit"/>, cleared by the call's next connection and at each visit the manager
     /// opens. Written only under <see cref="SyncRoot"/>; not persisted.
     /// </summary>
-    internal bool AwaitingAnswerAfterUnansweredVisit { get; set; }
+    internal bool AwaitingAnswerAfterUnansweredVisit
+    {
+        get => _episode is { AwaitingAnswerAfterUnansweredVisit: true };
+        set
+        {
+            if (value || _episode is not null)
+                Episode.AwaitingAnswerAfterUnansweredVisit = value;
+        }
+    }
 
     /// <summary>
     /// Whether a report of channel <paramref name="uniqueId"/> is the waiting channel's own while the call awaits an
@@ -522,7 +597,15 @@ public sealed class CallSession
     /// (<see cref="TryCompleteConnectedWhileWaiting"/>). Set by <see cref="TryReturnFromUnansweredVisit"/>, cleared by
     /// the call's next connection. Written only under <see cref="SyncRoot"/>; not persisted.
     /// </summary>
-    internal bool TransferringAfterUnansweredVisit { get; set; }
+    internal bool TransferringAfterUnansweredVisit
+    {
+        get => _episode is { TransferringAfterUnansweredVisit: true };
+        set
+        {
+            if (value || _episode is not null)
+                Episode.TransferringAfterUnansweredVisit = value;
+        }
+    }
 
     /// <summary>
     /// Whether the call's ending is decided by the cause of the channel that waited in a queue: it was connected and
@@ -718,7 +801,15 @@ public sealed class CallSession
     /// The channel whose hold started the running hold clock, or <see langword="null"/> when no hold is running or it is
     /// not known (a session restored from a store). Written only under <see cref="SyncRoot"/>; not persisted.
     /// </summary>
-    internal string? HoldChannelUniqueId { get; private set; }
+    internal string? HoldChannelUniqueId
+    {
+        get => _episode?.HoldChannelUniqueId;
+        private set
+        {
+            if (value is not null || _episode is not null)
+                Episode.HoldChannelUniqueId = value;
+        }
+    }
 
     /// <summary>
     /// Whether the end of a hold of channel <paramref name="uniqueId"/> ends the running hold clock: a hold is running and

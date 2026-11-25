@@ -530,10 +530,8 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
         // The session this leg opens if it finds no live call to join. Built once, fully, before it can
         // be published, so whoever finds it through the linkedid index sees a complete session.
         var direction = _correlator.InferDirection(channel.Context, channel.Extension);
-        var session = new CallSession(Guid.NewGuid().ToString("N"), linkedId, serverId, direction)
-        {
-            CreatedAt = _timeProvider.GetUtcNow(),
-        };
+        var session = new CallSession(Guid.NewGuid().ToString("N"), linkedId, serverId, direction,
+            _timeProvider.GetUtcNow());
 
         // An arrival subscribed before installation can lose its removal before that subscription is ready.
         // Keep it pending until iii or completion, without borrowing a newer attachment for its birth stamp.

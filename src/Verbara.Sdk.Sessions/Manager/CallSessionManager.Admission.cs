@@ -202,9 +202,8 @@ public sealed partial class CallSessionManager
     private CallSession NewAdmissionSession(AsteriskChannel channel, string serverId, string linkedId, ServerSubscriptions attachment)
     {
         var call = new CallSession(Guid.NewGuid().ToString("N"), linkedId, serverId,
-            _correlator.InferDirection(channel.Context, channel.Extension))
+            _correlator.InferDirection(channel.Context, channel.Extension), _timeProvider.GetUtcNow())
         {
-            CreatedAt = _timeProvider.GetUtcNow(),
             Unverified = true,
             AttachmentGeneration = attachment.Generation,
             Context = channel.Context,
