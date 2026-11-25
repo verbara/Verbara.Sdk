@@ -275,6 +275,34 @@ public sealed class QueueSessionTrackerTests : IDisposable
     }
 
     /// <summary>
+    /// The tracker did not see the visit open, but the manager knew when it began, so the event carries the visit's
+    /// real wait. Only a zero means "unknown": a known wait stands as the event reports it, even while the manager
+    /// still holds the call and could give the longer wait since it was created.
+    /// </summary>
+    [Fact]
+    public void OnCallConnected_ShouldRecordTheEventsWait_WhenTheTrackerMissedTheVisitAndTheEventCarriesAKnownWait()
+    {
+        using var events = new Subject<SessionDomainEvent>();
+        var manager = Substitute.For<ICallSessionManager>();
+        manager.Events.Returns(events);
+        manager.GetById("session-1").Returns(new CallSession("session-1", "linked-1", "server-1", CallDirection.Inbound)
+        {
+            CreatedAt = T0,
+        });
+        using var tracker = new QueueSessionTracker(manager, Options.Create(_options));
+
+        events.OnNext(new CallConnectedEvent("session-1", "server-1", T0.AddSeconds(30), null, "support",
+            TimeSpan.FromSeconds(7)));
+
+        var queue = tracker.GetByQueueName("support")!;
+        using var scope = new AssertionScope();
+        queue.CallsAnswered.Should().Be(1, "the queue connected the call");
+        queue.TotalWaitTime.Should().Be(TimeSpan.FromSeconds(7), "the event's known visit wait stands, not the 30 s since creation");
+        queue.MinWaitTime.Should().Be(TimeSpan.FromSeconds(7), "the visit waited 7 s");
+        queue.CallsWithinSla.Should().Be(1, "7 s is within the 20 s threshold");
+    }
+
+    /// <summary>
     /// The first queue's metrics window has expired when the caller joins a second queue while its visit in the first
     /// is still open (no leave was observed). That visit closes as abandoned in a new window, which does not carry the
     /// expired window's offer.
