@@ -133,7 +133,8 @@ public sealed class ConnectedEventContentTests
         (visit.QueueName, visit.AgentInterface, visit.WaitTime).Should().Be(("q-pjsip", "PJSIP/agent1", TimeSpan.FromSeconds(2)),
             "the first connection answers q-pjsip's visit 2 s after it opened, made by its member's connect");
         var back = rig.Connected[1];
-        (back.QueueName, back.AgentInterface, back.AgentId).Should().Be(((string?)null, (string?)null, (string?)null),
+        (string? QueueName, string? AgentInterface, string? AgentId) noVisit = (null, null, null);
+        (back.QueueName, back.AgentInterface, back.AgentId).Should().Be(noVisit,
             "the return answers no queue visit, and no member's or agent's connect made it");
         back.WaitTime.Should().Be(TimeSpan.FromSeconds(3), "the return waits from the transfer (C - X), not from the call's creation");
         rig.Manager.GetById(back.SessionId)!.QueueName.Should().Be("q-pjsip", "the call's own queue name is still q-pjsip");

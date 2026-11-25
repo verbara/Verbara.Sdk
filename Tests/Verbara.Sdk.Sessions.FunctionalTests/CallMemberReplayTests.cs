@@ -38,15 +38,18 @@ public sealed class CallMemberReplayTests
 
         var first = run.Announcements[0];
         var second = run.Announcements[1];
-        (first.AgentId, first.AgentInterface).Should().Be(((string?)null, (string?)"PJSIP/agent1"),
+        (string? AgentId, string? AgentInterface) firstMember = (null, "PJSIP/agent1");
+        (string? AgentId, string? AgentInterface) secondMember = (null, "PJSIP/agent2");
+        (first.AgentId, first.AgentInterface).Should().Be(firstMember,
             "the first visit's member is recorded before that connection is announced");
-        (second.AgentId, second.AgentInterface).Should().Be(((string?)null, (string?)"PJSIP/agent2"),
+        (second.AgentId, second.AgentInterface).Should().Be(secondMember,
             "the second visit's connection is the call's most recent: its member is recorded before it is announced");
-        var save = store.Saves.Skip(second.SavesBefore).FirstOrDefault(s => s.SessionId == run.Session!.SessionId);
-        save.Should().NotBeNull("the second connection is saved");
-        (save?.State, save?.AgentInterface).Should().Be(((CallSessionState?)CallSessionState.Connected, (string?)"PJSIP/agent2"),
-            "the save made after the second connection carries its member");
-        (run.Session!.AgentId, run.Session.AgentInterface).Should().Be(((string?)null, (string?)"PJSIP/agent2"),
+        var firstSave = store.Saves.Skip(second.SavesBefore).Where(s => s.SessionId == run.Session!.SessionId)
+            .Select(s => (s.State, s.AgentInterface)).Take(1).ToList();
+        firstSave.Should().NotBeEmpty("the second connection is saved");
+        (CallSessionState State, string? AgentInterface)[] expectedSave = [(CallSessionState.Connected, "PJSIP/agent2")];
+        firstSave.Should().Equal(expectedSave, "the save made after the second connection carries its member");
+        (run.Session!.AgentId, run.Session.AgentInterface).Should().Be(secondMember,
             "the call keeps the second member once it has ended");
     }
 
@@ -64,9 +67,10 @@ public sealed class CallMemberReplayTests
             return;
 
         run.Announcements[0].AgentInterface.Should().Be("PJSIP/agent1", "premise: the queue's member took the call");
-        (run.Announcements[1].AgentId, run.Announcements[1].AgentInterface).Should().Be(((string?)null, (string?)null),
+        (string? AgentId, string? AgentInterface) noMember = (null, null);
+        (run.Announcements[1].AgentId, run.Announcements[1].AgentInterface).Should().Be(noMember,
             "the transfer target's answer made the call's most recent connection, which names no member");
-        (run.Session!.AgentId, run.Session.AgentInterface).Should().Be(((string?)null, (string?)null),
+        (run.Session!.AgentId, run.Session.AgentInterface).Should().Be(noMember,
             "the call records no member once it has ended");
     }
 

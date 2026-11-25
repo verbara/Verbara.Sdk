@@ -121,7 +121,8 @@ public sealed class ConnectedEventContentReplayTests
         var queued = run.Announcements[1].Event;
         answer.WaitTime.Should().Be(answer.Timestamp - run.Session!.CreatedAt,
             "the plain dial's answer is the call's first connection outside a queue: it waits from the call's creation");
-        (answer.QueueName, answer.AgentInterface, answer.AgentId).Should().Be(((string?)null, (string?)null, (string?)null),
+        (string? QueueName, string? AgentInterface, string? AgentId) noVisit = (null, null, null);
+        (answer.QueueName, answer.AgentInterface, answer.AgentId).Should().Be(noVisit,
             "the dial's answer answers no visit and no member made it");
         queued.WaitTime.Should().Be(queued.Timestamp - visit.Timestamp,
             "the queue's announcement waits from the visit's start, not from the first answer");
@@ -141,7 +142,8 @@ public sealed class ConnectedEventContentReplayTests
         only.WaitTime.Should().Be(only.Timestamp - run.Session!.CreatedAt,
             "a first connection outside a queue waits from the call's creation");
         run.Session.WaitTime.Should().Be(only.WaitTime, "and that is the call's own wait");
-        (only.QueueName, only.AgentInterface, only.AgentId).Should().Be(((string?)null, (string?)null, (string?)null),
+        (string? QueueName, string? AgentInterface, string? AgentId) noVisit = (null, null, null);
+        (only.QueueName, only.AgentInterface, only.AgentId).Should().Be(noVisit,
             "the dial's answer answers no visit and no member made it");
     }
 
@@ -160,7 +162,8 @@ public sealed class ConnectedEventContentReplayTests
         var back = after.Should().ContainSingle("premise: the transfer target's answer returns the call to connected once").Subject;
         back.WaitTime.Should().Be(back.Timestamp - transfer.Timestamp,
             "the return's wait runs from the instant the call became transferring, not from the first connection's");
-        (back.QueueName, back.AgentInterface, back.AgentId).Should().Be(((string?)null, (string?)null, (string?)null),
+        (string? QueueName, string? AgentInterface, string? AgentId) noVisit = (null, null, null);
+        (back.QueueName, back.AgentInterface, back.AgentId).Should().Be(noVisit,
             "the return answers no queue visit, and no member's or agent's connect made it");
         if (queuedFirst)
         {

@@ -304,6 +304,9 @@ public sealed class CallSessionManagerWrapUpTests
         var secondCompletedAt = clock.GetUtcNow();
         rig.Deliver(SecondMemberHangsUp("support", "c1", "m2", secondMember, Bridge("c1") + "-2"));
         clock.Advance(TimeSpan.FromMinutes(5));
+        (string?, string?) expectedAfterFirstVisit = ("agent-1", Member);
+        (string?, string?)? expectedAtSecondAnnouncement = (null, secondMember);
+        (string?, string?) expectedAtEnd = (null, secondMember);
 
         new
         {
@@ -317,15 +320,15 @@ public sealed class CallSessionManagerWrapUpTests
         }.Should().BeEquivalentTo(
             new
             {
-                AfterFirstVisit = ((string?)"agent-1", (string?)Member),
+                AfterFirstVisit = expectedAfterFirstVisit,
                 WrapUpsAtSecondConnect = Array.Empty<CallWrapUpEvent>(),
                 Announced = new (string?, string?, string?)[]
                 {
                     ("agent-1", Queue, Member),
                     (null, "support", secondMember),
                 },
-                AtSecondAnnouncement = ((string?, string?)?)(null, secondMember),
-                AtEnd = ((string?)null, (string?)secondMember),
+                AtSecondAnnouncement = expectedAtSecondAnnouncement,
+                AtEnd = expectedAtEnd,
                 WrapUps = new[]
                 {
                     new CallWrapUpEvent(sessionId, ServerId, firstCompletedAt + WrapUp, "agent-1", Queue, WrapUp),
@@ -410,6 +413,7 @@ public sealed class CallSessionManagerWrapUpTests
         rig.Deliver(MemberHangsUp(Queue, "c1", "m1", Member, agent: "agent-1"));
         clock.Advance(WrapUp);
         clock.Advance(TimeSpan.FromMinutes(5));
+        (string?, string?) expectedAfterConnect = ("agent-1", Member);
 
         new
         {
@@ -420,7 +424,7 @@ public sealed class CallSessionManagerWrapUpTests
         }.Should().BeEquivalentTo(
             new
             {
-                AfterConnect = ((string?)"agent-1", (string?)Member),
+                AfterConnect = expectedAfterConnect,
                 Announced = new (string?, string?, string?)[] { ("agent-1", Queue, Member) },
                 WrapUps = new[]
                 {

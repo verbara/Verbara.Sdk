@@ -135,7 +135,8 @@ public sealed class CallSessionManagerConnectedMemberTests
         Connected(rig, session.SessionId).Should().Equal(expected,
             "the agent's connect announces the call with the agent's interface; after the transfer the call's "
             + "bridge announces it connected again, and no member's connect made that connection");
-        (session.AgentId, session.AgentInterface).Should().Be(((string?)null, (string?)null),
+        (string? AgentId, string? AgentInterface) noAgent = (null, null);
+        (session.AgentId, session.AgentInterface).Should().Be(noAgent,
             "the bridge entry made the call's most recent connection and names no agent and no member, so the call "
             + "no longer records agent-4");
     }
@@ -162,13 +163,15 @@ public sealed class CallSessionManagerConnectedMemberTests
             BridgeEnter("bridge-c1-2", "t1"),
             BridgeEnter("bridge-c1-2", "c1"));
 
-        afterConnect.Should().Be(((string?)"agent-1", (string?)First), "premise: agent-1's connect recorded the agent");
+        (string? AgentId, string? AgentInterface) agent1 = ("agent-1", First);
+        (string? AgentId, string? AgentInterface) noAgentAfterReturn = (null, null);
+        afterConnect.Should().Be(agent1, "premise: agent-1's connect recorded the agent");
         Connected(rig, session.SessionId).Should().Equal([("sales", First), (null, null)],
             "premise: the extension's answer returns the call to connected, a connection no member made");
-        atReturn.Should().Be(((string?)null, (string?)null),
+        atReturn.Should().Be(noAgentAfterReturn,
             "the extension's answer made the call's most recent connection, which names no agent and no member, so "
             + "a consumer of the return's announcement no longer reads agent-1");
-        (session.AgentId, session.AgentInterface).Should().Be(((string?)null, (string?)null),
+        (session.AgentId, session.AgentInterface).Should().Be(noAgentAfterReturn,
             "the call still records no agent and no member after the return");
     }
 

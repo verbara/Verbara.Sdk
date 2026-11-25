@@ -167,7 +167,8 @@ public class SnapshotSerializationTests
         var restored = CallSessionSnapshot.FromSession(saved).ToSession();
         var joined = restored.TryTransition(CallSessionState.Queued);
 
-        (restored.ConnectedAt, joined).Should().Be(((DateTimeOffset?)null, true),
+        (DateTimeOffset? ConnectedAt, bool Joined) expectedRestored = (null, true);
+        (restored.ConnectedAt, joined).Should().Be(expectedRestored,
             "premise: the restored call has no connected time and can join a queue");
         restored.TryCompleteConnectedWhileWaiting().Should().BeTrue(
             "the restored call was connected, so when it is over while waiting in a later queue it ends completed");

@@ -56,8 +56,8 @@ public sealed class QueueVisitAnnouncementTests
             "app_queue's connect announces the visit, and the transfer target's answer returns the call to connected, "
             + "which is announced once more; the dial outcome and the bridge that follow it find the call connected");
         rig.Connected[0].QueueName.Should().Be("q-pjsip", "the first announcement is the queue visit's");
-        (rig.Connected[1].QueueName, rig.Connected[1].AgentInterface, rig.Connected[1].AgentId).Should().Be(
-            ((string?)null, (string?)null, (string?)null),
+        (string? QueueName, string? AgentInterface, string? AgentId) noVisit = (null, null, null);
+        (rig.Connected[1].QueueName, rig.Connected[1].AgentInterface, rig.Connected[1].AgentId).Should().Be(noVisit,
             "the return answers no queue visit, and no member's or agent's connect made it");
         rig.Counts("q-pjsip").Should().Be(new QueueOutcome(Answered: 1, Abandoned: 0, Waiting: 0),
             "the queue answered the call once; the return is not its answer");
