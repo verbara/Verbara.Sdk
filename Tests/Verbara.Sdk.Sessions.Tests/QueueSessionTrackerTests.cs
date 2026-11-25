@@ -248,6 +248,33 @@ public sealed class QueueSessionTrackerTests : IDisposable
     }
 
     /// <summary>
+    /// Neither the tracker nor the manager knew when the visit began, so the event's wait is zero, which means unknown,
+    /// not "answered at once": the answer takes the wait since the call was created instead, as the queue wait-time
+    /// histogram does, and is not counted within the SLA on a wait nobody measured.
+    /// </summary>
+    [Fact]
+    public void OnCallConnected_ShouldRecordTheWaitSinceTheCallWasCreated_WhenTheEventCarriesTheZeroOfAnUnknownVisitStart()
+    {
+        using var events = new Subject<SessionDomainEvent>();
+        var manager = Substitute.For<ICallSessionManager>();
+        manager.Events.Returns(events);
+        manager.GetById("session-1").Returns(new CallSession("session-1", "linked-1", "server-1", CallDirection.Inbound)
+        {
+            CreatedAt = T0,
+        });
+        using var tracker = new QueueSessionTracker(manager, Options.Create(_options));
+
+        events.OnNext(new CallConnectedEvent("session-1", "server-1", T0.AddSeconds(30), null, "support", TimeSpan.Zero));
+
+        var queue = tracker.GetByQueueName("support")!;
+        using var scope = new AssertionScope();
+        queue.CallsAnswered.Should().Be(1, "the queue connected the call");
+        queue.TotalWaitTime.Should().Be(TimeSpan.FromSeconds(30), "the call waited at most the 30 s since it was created");
+        queue.MinWaitTime.Should().Be(TimeSpan.FromSeconds(30), "an unknown wait is not a wait of zero");
+        queue.CallsWithinSla.Should().Be(0, "30 s is above the 20 s threshold, and an unknown wait is never counted within it");
+    }
+
+    /// <summary>
     /// The first queue's metrics window has expired when the caller joins a second queue while its visit in the first
     /// is still open (no leave was observed). That visit closes as abandoned in a new window, which does not carry the
     /// expired window's offer.

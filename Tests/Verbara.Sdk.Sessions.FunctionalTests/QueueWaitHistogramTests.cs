@@ -220,7 +220,8 @@ public sealed class QueueWaitHistogramTests
     /// a session restored from a snapshot carries, and what a consumer can write through the public
     /// <see cref="CallSession.QueueName"/>. With no visit start, the sample falls back to the call's wait
     /// since it was created. The announcement's own wait, whose start is unknown, is zero, and the queue's
-    /// metrics, which never saw the visit open either, record the announcement's wait.
+    /// metrics, which never saw the visit open either, read that zero as unknown and record the wait since the call was
+    /// created too, as the sample does.
     /// </summary>
     [Fact]
     public async Task WaitHistogram_ShouldRecordTheWaitSinceTheCallWasCreated_WhenTheManagerNeverSawTheVisitOpen()
@@ -245,8 +246,9 @@ public sealed class QueueWaitHistogramTests
             "the manager never saw the visit open, so the sample is the call's wait since it was created");
         rig.Connected[0].WaitTime.Should().Be(TimeSpan.Zero,
             "the announcement waits from the visit's start, and that start is unknown");
-        rig.Tracker.GetByQueueName("q-pjsip")!.TotalWaitTime.Should().Be(TimeSpan.Zero,
-            "the queue's metrics never saw the visit open either, and record the announcement's wait");
+        rig.Tracker.GetByQueueName("q-pjsip")!.TotalWaitTime.Should().Be(TimeSpan.FromSeconds(3),
+            "the queue's metrics never saw the visit open either, and record the call's wait since it was created, "
+            + "as the sample does, not the announcement's zero");
     }
 
     // --- The frames ---------------------------------------------------------------------------
