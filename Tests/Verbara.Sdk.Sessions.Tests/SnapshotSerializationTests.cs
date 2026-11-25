@@ -47,6 +47,8 @@ public class SnapshotSerializationTests
         session.Transition(CallSessionState.Dialing);
         session.Transition(CallSessionState.Ringing);
         session.Transition(CallSessionState.Connected);
+        // The manager sets the connected time when it announces the connection; a bare transition does not.
+        session.ConnectedAt = session.CreatedAt.AddSeconds(5);
         session.StartHold();
         session.Transition(CallSessionState.OnHold);
 

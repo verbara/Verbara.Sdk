@@ -174,6 +174,7 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
         var recorder = EpochRecorder.On(manager);
         manager.AttachToServer(run.Server, ServerId);
         await first.SendEventAsync("Newchannel", AsteriskFrames.Newchannel(Caller, CallerChannel, Caller));
+        await first.SendEventAsync("DialBegin", Frames.DialBegin(Caller, CallerChannel));
         await first.SendEventAsync("AgentConnect", Frames.AgentConnect(Caller, CallerChannel));
         await recorder.WaitAsync<CallConnectedEvent>();
         await first.SendEventAsync("Hangup", AsteriskFrames.Hangup(Caller, CallerChannel, Caller));
@@ -456,6 +457,7 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
 
         // The known agent's call on B ends, and its wrap-up opens; no event of B is delivered after it.
         await peerB.SendEventAsync("Newchannel", AsteriskFrames.Newchannel(Caller, CallerChannel, Caller));
+        await peerB.SendEventAsync("DialBegin", Frames.DialBegin(Caller, CallerChannel));
         await peerB.SendEventAsync("AgentConnect", Frames.AgentConnect(Caller, CallerChannel));
         await recorder.WaitAsync<CallConnectedEvent>(e => e.ServerId == "srv-b");
         await peerB.SendEventAsync("Hangup", AsteriskFrames.Hangup(Caller, CallerChannel, Caller));
@@ -466,8 +468,12 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
         // A's connection drops one event; then the agent connects on A, which closes the wrap-up inside A's delivery.
         await EpochRig.DropOneEventAsync(runA, peerA);
         await peerA.SendEventAsync("Newchannel", AsteriskFrames.Newchannel(Other, OtherChannel, Other));
-        // A's pump holds one event: the connect is sent once the arrival has been delivered, so the buffer has room.
+        // A's pump holds one event: each frame is sent once the one before it has been delivered, so the buffer has
+        // room. The call waits in the queue, so the agent's connect is the report that connects it.
         await recorder.WaitAsync<CallStartedEvent>(e => e.ServerId == "srv-a");
+        await peerA.SendEventAsync("QueueCallerJoin",
+            AsteriskFrames.QueueCallerJoin(Other, OtherChannel, BootingAsterisk.QueueName, 1, 1));
+        await recorder.WaitAsync<CallQueuedEvent>(e => e.ServerId == "srv-a");
         await peerA.SendEventAsync("AgentConnect", Frames.AgentConnect(Other, OtherChannel));
         var wrapUp = await recorder.WaitAsync<CallWrapUpEvent>();
         var connectedOnA = await recorder.WaitAsync<CallConnectedEvent>(e => e.ServerId == "srv-a");
@@ -606,6 +612,17 @@ public sealed class SessionEventEpochDropTests(ITestOutputHelper output)
             new("DestLinkedid", uniqueId), new("Queue", BootingAsterisk.QueueName), new("Interface", "PJSIP/agent-1001"),
             new("MemberName", "Agent " + BootingAsterisk.AgentId), new("Agent", BootingAsterisk.AgentId),
             new("HoldTime", "0"), new("RingTime", "1"),
+        ];
+
+        /// <summary>
+        /// The caller's dial of the known agent's leg, which puts the call in dialing: the agent's connect that follows
+        /// is then the report that connects it, and its announcement names the agent.
+        /// </summary>
+        public static KeyValuePair<string, string>[] DialBegin(string uniqueId, string channel) =>
+        [
+            new("Privilege", "call,all"), new("Channel", channel), new("ChannelState", "4"), new("ChannelStateDesc", "Ring"),
+            new("Uniqueid", uniqueId), new("Linkedid", uniqueId), new("DestChannel", "PJSIP/agent-1001-" + uniqueId),
+            new("DestUniqueid", uniqueId + "9"), new("DestLinkedid", uniqueId), new("DialString", "PJSIP/agent-1001"),
         ];
 
         /// <summary><c>Hold</c> of the caller's channel.</summary>

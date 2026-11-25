@@ -114,9 +114,7 @@ public sealed class EndingOnceTests
         using var tracker = new AgentSessionTracker(rig.Manager, Microsoft.Extensions.Options.Options.Create(rig.Options),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentSessionTracker>.Instance);
         rig.Server.Agents.OnAgentLogin("agent-1", "PJSIP/100");
-        var call = rig.OpenAnsweredCall("g");
-        rig.Server.Agents.OnAgentConnect("agent-1", "PJSIP/100", linkedId: ResidencyRig.LinkedIdOf("g"),
-            memberInterface: "PJSIP/100");
+        var call = rig.OpenAgentConnectedCall("g", "agent-1", "PJSIP/100");
 
         // A fixed 30 s of talk, so a second count shows whatever the wall clock did between the
         // answer and the hangup.

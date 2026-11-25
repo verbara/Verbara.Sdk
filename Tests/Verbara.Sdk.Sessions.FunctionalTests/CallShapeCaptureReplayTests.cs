@@ -119,9 +119,10 @@ public sealed class CallShapeCaptureReplayTests
     /// a member takes (S6, S10) or that are abandoned (S7, S11), and the dialed calls (S9, S12) — four of them
     /// answered by the dialplan before they are queued or dialed. States, the queued and dialing times, the order
     /// of <c>QueueJoined</c> or <c>Dialing</c> before any <c>Connected</c> entry, the kinds of domain event each
-    /// call publishes, and how many <see cref="CallConnectedEvent"/>s the capture publishes, all as before; never
-    /// an exact audit trail, which a recorded ring would legitimately lengthen. Each of these was observed red
-    /// with <c>Connected</c> admitted from the initial state, the shape that moves them.
+    /// call publishes, and how many <see cref="CallConnectedEvent"/>s the capture publishes; never an exact audit
+    /// trail, which a recorded ring would legitimately lengthen. Each of these was observed red with
+    /// <c>Connected</c> admitted from the initial state, the shape that moves them. The dialed calls are announced
+    /// connected once, by the agent's answer, as every entry into <c>Connected</c> from dialing is.
     /// </summary>
     [Theory]
     [MemberData(nameof(CallShapeCaptures))]
@@ -160,15 +161,15 @@ public sealed class CallShapeCaptureReplayTests
                 CallSessionEventType.Dialing, "{0} passes through Dialing before it connects", call.Scenario);
         }
 
-        foreach (var (scenario, kinds) in DomainEventKindsToday)
+        foreach (var (scenario, kinds) in DomainEventKinds)
         {
             var call = replay.Call(scenario);
             call.DomainEvents.Select(e => e.GetType().Name).Should().Equal(kinds,
-                "{0} publishes the kinds of domain event it published before", call.Scenario);
+                "{0} publishes one domain event of each kind it should, in this order", call.Scenario);
         }
 
-        replay.Calls.Sum(c => c.DomainEvents.OfType<CallConnectedEvent>().Count()).Should().Be(ConnectedEventsPerCaptureToday,
-            "the capture announces as many connections as before: only the two calls a queue member took");
+        replay.Calls.Sum(c => c.DomainEvents.OfType<CallConnectedEvent>().Count()).Should().Be(ConnectedEventsPerCapture,
+            "the capture announces one connection per call a member or an agent's answer connected: S6, S9, S10 and S12");
     }
 
     /// <summary>
@@ -251,7 +252,7 @@ public sealed class CallShapeCaptureReplayTests
     /// opens it and S10's connect of the same member closes it, after S6's <see cref="CallEndedEvent"/>. S10's own
     /// wrap-up opens at its <c>AgentComplete</c> and is still open when the replay ends, so S10 keeps four kinds.
     /// </summary>
-    private static readonly (string Scenario, string[] Kinds)[] DomainEventKindsToday =
+    private static readonly (string Scenario, string[] Kinds)[] DomainEventKinds =
     [
         ("S1", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
         ("S2", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
@@ -261,14 +262,18 @@ public sealed class CallShapeCaptureReplayTests
         ("S8", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
         ("S6", [nameof(CallStartedEvent), nameof(CallQueuedEvent), nameof(CallConnectedEvent), nameof(CallEndedEvent), nameof(CallWrapUpEvent)]),
         ("S7", [nameof(CallStartedEvent), nameof(CallQueuedEvent), nameof(CallEndedEvent)]),
-        ("S9", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+        ("S9", [nameof(CallStartedEvent), nameof(CallConnectedEvent), nameof(CallEndedEvent)]),
         ("S10", [nameof(CallStartedEvent), nameof(CallQueuedEvent), nameof(CallConnectedEvent), nameof(CallEndedEvent)]),
         ("S11", [nameof(CallStartedEvent), nameof(CallQueuedEvent), nameof(CallEndedEvent)]),
-        ("S12", [nameof(CallStartedEvent), nameof(CallEndedEvent)]),
+        ("S12", [nameof(CallStartedEvent), nameof(CallConnectedEvent), nameof(CallEndedEvent)]),
     ];
 
-    /// <summary>The <see cref="CallConnectedEvent"/>s each capture published on <c>9866b2ef</c>: S6's and S10's.</summary>
-    private const int ConnectedEventsPerCaptureToday = 2;
+    /// <summary>
+    /// The <see cref="CallConnectedEvent"/>s each capture publishes: S6's and S10's, which a queue member takes, and
+    /// S9's and S12's, which the agent's answer of their dial connects. The answered calls that no dial or queue
+    /// reached (S1 to S4, S8) are never connected while live, so they publish none.
+    /// </summary>
+    private const int ConnectedEventsPerCapture = 4;
 
     /// <summary>The queued scenarios a member takes.</summary>
     private static readonly string[] TakenByAMember = ["S6", "S10"];

@@ -351,16 +351,24 @@ internal static class WrapUpFrames
 
     /// <summary>
     /// A call outside any queue that <paramref name="agent"/>, known by name, takes on <paramref name="member"/>: the
-    /// caller's channel rings, the agent's leg answers, the connect names the agent, and both legs enter one bridge.
-    /// The manager never saw the caller join a queue, so the call has no queue.
+    /// caller's channel dials the agent's leg, the connect naming the agent connects the call, the agent's leg is then
+    /// reported answered, and both legs enter one bridge. The manager never saw the caller join a queue, so the call
+    /// has no queue. The connect comes before the leg's answer because a call is announced by the report that connects
+    /// it: a leg's answer reported first would connect the call naming no agent, and the connect would find it
+    /// connected. No capture holds an <c>AgentConnect</c> naming an agent, so the order is the frames' choice.
     /// </summary>
     public static ManagerEvent[] NamedAgentCallConnected(string caller, string agentLeg, string member, string agent) =>
     [
         NewChannel(caller, CallerChannel(caller), "Down", caller, context: "from-trunk", exten: "600"),
         NewState(caller, "Ring"),
         NewChannel(agentLeg, MemberChannel(member, agentLeg), "Down", caller, context: "agents"),
-        NewState(agentLeg, "Up"),
+        new DialBeginEvent
+        {
+            EventType = "DialBegin", UniqueId = caller, Channel = CallerChannel(caller), DestUniqueid = agentLeg,
+            DestChannel = MemberChannel(member, agentLeg), DialString = member,
+        },
         AgentConnect("", caller, CallerChannel(caller), caller, member, agentLeg, MemberChannel(member, agentLeg), agent),
+        NewState(agentLeg, "Up"),
         NewState(caller, "Up"),
         BridgeCreate(Bridge(caller)),
         BridgeEnter(Bridge(caller), agentLeg),

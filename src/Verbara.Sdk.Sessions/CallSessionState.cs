@@ -1,8 +1,27 @@
 namespace Verbara.Sdk.Sessions;
 
+/// <summary>
+/// Where a call stands now. The numeric value of every state is kept from release to release.
+/// </summary>
 public enum CallSessionState
 {
-    Created, Dialing, Ringing, Queued, Connected, OnHold,
+    Created, Dialing, Ringing,
+
+    /// <summary>
+    /// Waiting in a queue until app_queue reports a connection or the call ends: a call that joins a queue waits here
+    /// whether it joins from its initial, dialing or ringing state, or after it was connected or transferring.
+    /// </summary>
+    Queued,
+
+    /// <summary>
+    /// In conversation with someone now. Each entry into this state from <see cref="Dialing"/>, <see cref="Ringing"/>,
+    /// <see cref="Queued"/> or <see cref="Transferring"/> is announced by one <see cref="CallConnectedEvent"/>; a return
+    /// from <see cref="OnHold"/> is not. A call a state reload or the admission of existing calls opens here was found
+    /// connected, and its <see cref="CallSession.ConnectedAt"/> stays <c>null</c> until a connection of its own is observed.
+    /// </summary>
+    Connected,
+
+    OnHold,
     Transferring, Conference, Completed, Failed,
 
     /// <summary>
@@ -24,9 +43,9 @@ internal static class CallSessionStateTransitions
         [CallSessionState.Dialing] = [CallSessionState.Ringing, CallSessionState.Queued, CallSessionState.Connected, CallSessionState.Failed, CallSessionState.TimedOut],
         [CallSessionState.Ringing] = [CallSessionState.Queued, CallSessionState.Connected, CallSessionState.Failed, CallSessionState.TimedOut],
         [CallSessionState.Queued] = [CallSessionState.Connected, CallSessionState.Failed, CallSessionState.TimedOut],
-        [CallSessionState.Connected] = [CallSessionState.OnHold, CallSessionState.Transferring, CallSessionState.Conference, CallSessionState.Completed, CallSessionState.Failed],
+        [CallSessionState.Connected] = [CallSessionState.Queued, CallSessionState.OnHold, CallSessionState.Transferring, CallSessionState.Conference, CallSessionState.Completed, CallSessionState.Failed],
         [CallSessionState.OnHold] = [CallSessionState.Connected, CallSessionState.Transferring, CallSessionState.Completed, CallSessionState.Failed],
-        [CallSessionState.Transferring] = [CallSessionState.Connected, CallSessionState.Failed],
+        [CallSessionState.Transferring] = [CallSessionState.Queued, CallSessionState.Connected, CallSessionState.Failed],
         [CallSessionState.Conference] = [CallSessionState.Connected, CallSessionState.Completed, CallSessionState.Failed],
         [CallSessionState.Completed] = [],
         [CallSessionState.Failed] = [],

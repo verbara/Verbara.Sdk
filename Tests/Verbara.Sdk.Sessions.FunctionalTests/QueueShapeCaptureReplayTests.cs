@@ -20,14 +20,14 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 public sealed class QueueShapeCaptureReplayTests
 {
     /// <summary>
-    /// The <see cref="CallConnectedEvent"/>s the two calls that never join a queue published before
-    /// queue accounting followed app_queue, as (queue, agent), identical on all three captures.
-    /// Recorded on <c>bbb7bc14</c>: neither is ever announced connected. Timestamps and session ids
-    /// vary from run to run, so they are not part of it.
+    /// The <see cref="CallConnectedEvent"/>s the two calls that never join a queue publish, as (queue, agent),
+    /// identical on all three captures: the direct dial is announced once, by its answer, naming no queue and no
+    /// agent; the IVR, answered by the dialplan alone, never enters connected and is never announced. Timestamps and
+    /// session ids vary from run to run, so they are not part of it.
     /// </summary>
-    private static readonly Dictionary<string, (string? Queue, string? Agent)[]> NeverQueuedConnectedBaseline = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, (string? Queue, string? Agent)[]> NeverQueuedConnected = new(StringComparer.Ordinal)
     {
-        ["D"] = [],
+        ["D"] = [(null, null)],
         ["I"] = [],
     };
 
@@ -53,7 +53,7 @@ public sealed class QueueShapeCaptureReplayTests
 
     [Theory]
     [MemberData(nameof(QueueShapeCaptures))]
-    public async Task CallsThatNeverJoinAQueue_ShouldMoveNoQueueCountAndBeAnnouncedAsBefore_WhenAQueueShapeCaptureIsReplayed(string fixture)
+    public async Task CallsThatNeverJoinAQueue_ShouldMoveNoQueueCountAndBeAnnouncedOncePerAnswer_WhenAQueueShapeCaptureIsReplayed(string fixture)
     {
         var replay = await AmiCaptureReplay.ReplayQueueShapesAsync(fixture);
         using var scope = new AssertionScope();
@@ -67,8 +67,8 @@ public sealed class QueueShapeCaptureReplayTests
             new QueueCounters(shape.Offered, shape.Answered, shape.Abandoned, shape.WaitingLeak).Should().Be(
                 new QueueCounters(0, 0, 0, 0), "{0} never joins a queue, so no queue count moves on its events", shape.Shape.Name);
             shape.ConnectedEvents.Select(e => (e.QueueName, e.AgentId)).Should().Equal(
-                NeverQueuedConnectedBaseline[shape.Shape.Id],
-                "{0} is announced connected as it was before, in number, queue and agent", shape.Shape.Name);
+                NeverQueuedConnected[shape.Shape.Id],
+                "{0} is announced connected once per entry into connected, naming no queue and no agent", shape.Shape.Name);
         }
     }
 

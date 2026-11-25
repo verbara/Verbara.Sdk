@@ -223,7 +223,9 @@ public sealed class QueueWaitHistogramTests
     [Fact]
     public async Task WaitHistogram_ShouldRecordTheWaitSinceTheCallWasCreated_WhenTheManagerNeverSawTheVisitOpen()
     {
-        var clock = new ManualClock(T0);
+        // The call's creation is stamped on the wall clock and its connection on the manager's, so the manager's clock
+        // starts at the wall clock's now and moves past the creation before the member answers.
+        var clock = new ManualClock(DateTimeOffset.UtcNow);
         await using var rig = await QueueCallRig.StartAsync(clock);
         using var samples = new WaitTimeSamples();
 
@@ -232,6 +234,9 @@ public sealed class QueueWaitHistogramTests
         var session = rig.Manager.GetByChannelId(c);
         session.Should().NotBeNull("the caller's channel opened the call");
         session!.QueueName = "q-pjsip";
+        // Waiting in the queue as a session restored from a snapshot is: queued, with no visit this manager opened.
+        session.TryTransition(CallSessionState.Queued).Should().BeTrue("premise: the call can wait in the queue");
+        clock.Advance(TimeSpan.FromSeconds(3));
         rig.Deliver(MemberAnswers(c, cCh, "m5", "PJSIP/agent1-00000024", "q-pjsip", "PJSIP/agent1", "b5", holdTime: 3));
 
         rig.Connected.Should().ContainSingle("app_queue connected the call once")

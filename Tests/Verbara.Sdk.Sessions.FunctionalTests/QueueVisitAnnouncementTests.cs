@@ -7,7 +7,8 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 
 /// <summary>
 /// When, and how often, a queue call is announced connected: once per queue visit, at app_queue's
-/// <c>AgentConnect</c>, whatever bridges follow.
+/// <c>AgentConnect</c>, whatever bridges of that visit follow, and once more when a transfer returns it to
+/// connected.
 /// </summary>
 /// <remarks>
 /// The frames are two calls Asterisk 22.9.0 sent live, written as typed events with the fields
@@ -45,16 +46,16 @@ public sealed class QueueVisitAnnouncementTests
     }
 
     [Fact]
-    public async Task QueueCall_ShouldNotBeAnnouncedAgain_WhenTheAnsweredVisitIsTransferredAndBridgedAgain()
+    public async Task QueueCall_ShouldBeAnnouncedOnceMore_WhenTheAnsweredVisitIsTransferredAndTheTargetAnswers()
     {
         await using var rig = await QueueCallRig.StartAsync();
 
         rig.Deliver(AnsweredThenTransferredToADial());
 
-        rig.Connected.Should().ContainSingle(
-                "the transfer's dial and bridge reconnect a visit that app_queue connected once")
-            .Which.QueueName.Should().Be("q-pjsip");
-        rig.Counts("q-pjsip").Should().Be(new QueueOutcome(Answered: 1, Abandoned: 0, Waiting: 0), "the queue answered the call once, and the transfer changes nothing there");
+        rig.Connected.Should().HaveCount(2,
+            "app_queue's connect announces the visit, and the transfer target's answer returns the call to connected, "
+            + "which is announced once more; the dial outcome and the bridge that follow it find the call connected");
+        rig.Connected[0].QueueName.Should().Be("q-pjsip", "the first announcement is the queue visit's");
     }
 
     [Fact]

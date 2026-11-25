@@ -28,6 +28,13 @@ public sealed class CallSession
     public string ServerId { get; }
 
     // State
+    /// <summary>
+    /// Where the call stands now. <see cref="CallSessionState.Connected"/> means the call is in conversation with someone
+    /// now, and each entry into it from dialing, ringing, queued or transferring is announced by one
+    /// <see cref="CallConnectedEvent"/>; a call that joins a queue, even after it was connected or transferring, waits in
+    /// <see cref="CallSessionState.Queued"/>. A call answered by the dialplan alone, with no dial or queue, stays
+    /// <see cref="CallSessionState.Created"/> while it is live.
+    /// </summary>
     public CallSessionState State { get; internal set; } = CallSessionState.Created;
     public CallDirection Direction { get; }
 
@@ -90,10 +97,13 @@ public sealed class CallSession
     public DateTimeOffset? QueuedAt { get; set; }
 
     /// <summary>
-    /// When the SDK observed the call connected. For a call answered while still in its initial state
-    /// (an IVR, an originate answered with no dial onward) and ended there, it is applied at the ending,
-    /// from the observed answer. It is <c>null</c> while such a call is live, and <c>null</c> for a call
-    /// opened from a reload whose answer the SDK never observed.
+    /// When the SDK first observed the call connected: the timestamp of the call's first
+    /// <see cref="CallConnectedEvent"/>, set as that event is published and never changed after it. A return from hold,
+    /// a reload, an admission, or a report that finds the call already connected does not set it, even while it is
+    /// <c>null</c>. So it is <c>null</c> for a call a reload or an admission opened connected until a connection of its
+    /// own is observed, and then it is that connection's announcement. For a call answered while still in its initial
+    /// state (an IVR, an originate answered with no dial onward) and ended there, it is applied at the ending, from the
+    /// observed answer; it is <c>null</c> while such a call is live.
     /// </summary>
     public DateTimeOffset? ConnectedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
@@ -468,7 +478,6 @@ public sealed class CallSession
             case CallSessionState.Dialing: DialingAt ??= now; break;
             case CallSessionState.Ringing: RingingAt ??= now; break;
             case CallSessionState.Queued: QueuedAt ??= now; break;
-            case CallSessionState.Connected: ConnectedAt ??= now; break;
             case CallSessionState.Completed:
             case CallSessionState.Failed:
             case CallSessionState.TimedOut:

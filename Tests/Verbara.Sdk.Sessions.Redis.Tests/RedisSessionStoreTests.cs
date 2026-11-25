@@ -60,6 +60,8 @@ public sealed class RedisSessionStoreTests : IAsyncLifetime
         session.Transition(CallSessionState.Dialing);
         session.Transition(CallSessionState.Ringing);
         session.Transition(CallSessionState.Connected);
+        // The manager sets the connected time when it announces the connection; a bare transition does not.
+        session.ConnectedAt = DateTimeOffset.UtcNow;
 
         await store.SaveAsync(session, CancellationToken.None);
         var loaded = await store.GetAsync("round-1", CancellationToken.None);

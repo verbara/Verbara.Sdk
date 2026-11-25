@@ -344,6 +344,28 @@ internal sealed class ResidencyRig : IAsyncDisposable
             ?? throw new InvalidOperationException($"no session for '{linkedId}'. Measured: {Describe()}");
     }
 
+    /// <summary>
+    /// As <see cref="OpenAnsweredCall"/>, with the connect of <paramref name="agentId"/>, an agent the server knows by
+    /// name, on <paramref name="memberInterface"/> reported before the agent's leg answers: that connect is what
+    /// connects the call, so its announcement names the agent. Reported after the answer, it would find the call
+    /// already connected and announce nothing.
+    /// </summary>
+    public CallSession OpenAgentConnectedCall(string tag, string agentId, string memberInterface)
+    {
+        var channels = Server.Channels;
+        var linkedId = LinkedIdOf(tag);
+        channels.OnNewChannel($"c-{tag}", $"PJSIP/trunk-c-{tag}", ChannelState.Ring,
+            callerIdNum: "5551234", context: "from-trunk", linkedId: linkedId);
+        channels.OnNewChannel($"a-{tag}", $"PJSIP/100-a-{tag}", ChannelState.Ring,
+            linkedId: linkedId);
+        channels.OnDialBegin($"c-{tag}", $"a-{tag}", $"PJSIP/100-a-{tag}", null);
+        Server.Agents.OnAgentConnect(agentId, memberInterface, linkedId: linkedId, memberInterface: memberInterface);
+        channels.OnNewState($"a-{tag}", ChannelState.Up);
+
+        return Manager.GetByLinkedId(linkedId)
+            ?? throw new InvalidOperationException($"no session for '{linkedId}'. Measured: {Describe()}");
+    }
+
     /// <summary>Both legs of <paramref name="tag"/>'s call hang up, with NormalClearing.</summary>
     public void HangUp(string tag, VerbaraServer? on = null)
     {

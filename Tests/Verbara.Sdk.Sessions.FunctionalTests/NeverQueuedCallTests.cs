@@ -7,21 +7,19 @@ using static Verbara.Sdk.Sessions.FunctionalTests.Infrastructure.QueueFrames;
 namespace Verbara.Sdk.Sessions.FunctionalTests;
 
 /// <summary>
-/// A call that never joins a queue is announced connected exactly as before queue accounting followed
-/// app_queue, and records no sample in the queue wait-time histogram (<c>sessions.wait_time</c>, published
+/// A call that never joins a queue is announced connected each time it enters connected from dialing, ringing or
+/// transferring, and records no sample in the queue wait-time histogram (<c>sessions.wait_time</c>, published
 /// as "Queue wait time").
 /// </summary>
 /// <remarks>
 /// <para>
-/// The announcements are pinned as they were before (recorded on <c>bbb7bc14</c>): a never-queued call is
-/// announced each time a bridge connects it, with no once-per-visit limit, and a known agent's connect
-/// announces it once, carrying the agent. Neither shape is in the queue-shape captures — their two
-/// never-queued calls are never announced at all — so the frames are typed, shaped as the captured frames
-/// are.
+/// The announcements follow the report that connects the call: its answer, and each bridge that connects it again
+/// after a transfer, naming no queue and no agent; a known agent's connect that finds the call already connected by
+/// its answer announces nothing. Neither shape is in the queue-shape captures, so the frames are typed, shaped as the
+/// captured frames are.
 /// </para>
 /// <para>
-/// The histogram half is the other way round: before, such a call recorded its time since creation at
-/// every bridge reconnect. Only the samples change; the announcements do not.
+/// No such call records a histogram sample, whichever report announces it: it has no queue wait.
 /// </para>
 /// </remarks>
 [Collection(WaitTimeHistogramGroup.Name)]
@@ -29,11 +27,11 @@ public sealed class NeverQueuedCallTests
 {
     /// <summary>
     /// A direct dial is answered and bridged, then the member blind-transfers the caller twice, and each
-    /// time the caller enters a bridge where a leg of another call is already up. No leg of this call
-    /// answers first, so the bridge is what connects it again, twice.
+    /// time the caller enters a bridge where a leg of another call is already up. The member's answer connects the
+    /// call; no leg of this call answers after a transfer, so the bridge is what connects it again, twice.
     /// </summary>
     [Fact]
-    public async Task NeverQueuedCall_ShouldBeAnnouncedAtEachBridgeReconnectAndRecordNoWaitSample_WhenTransferredTwiceIntoBridgesAlreadyUp()
+    public async Task NeverQueuedCall_ShouldBeAnnouncedAtItsAnswerAndAtEachBridgeReconnectAndRecordNoWaitSample_WhenTransferredTwiceIntoBridgesAlreadyUp()
     {
         await using var rig = await QueueCallRig.StartAsync();
         using var samples = new WaitTimeSamples();
@@ -56,19 +54,20 @@ public sealed class NeverQueuedCallTests
         using var scope = new AssertionScope();
         scope.AddReportable("samples", samples.Describe());
         rig.Connected.Select(e => (e.QueueName, e.AgentId)).Should().Equal(
-            [(null, null), (null, null)],
-            "the call never joined a queue, so each bridge that connects it again announces it, with no queue and no "
-            + "agent, as before");
+            [(null, null), (null, null), (null, null)],
+            "the member's answer connects the call, and each bridge that connects it again after a transfer announces "
+            + "it once more, with no queue and no agent");
         samples.Milliseconds.Should().HaveCount(0,
             "the call never joined a queue, so it has no queue wait to record, whichever path announces it");
     }
 
     /// <summary>
     /// app_queue connects a call to an agent the SDK knows by name (its <c>AgentLogin</c> was seen), but the
-    /// SDK never saw the call join the queue: no <c>QueueCallerJoin</c> reached it.
+    /// SDK never saw the call join the queue: no <c>QueueCallerJoin</c> reached it. The member's leg answers the
+    /// caller's dial before app_queue's connect, and that answer is what connects the call.
     /// </summary>
     [Fact]
-    public async Task NeverQueuedCall_ShouldBeAnnouncedOnceWithItsAgentAndRecordNoWaitSample_WhenAnAgentTheSdkKnowsConnectsIt()
+    public async Task NeverQueuedCall_ShouldBeAnnouncedOnceByItsAnswerAndRecordNoWaitSample_WhenAnAgentTheSdkKnowsConnectsItAfterTheAnswer()
     {
         await using var rig = await QueueCallRig.StartAsync();
         using var samples = new WaitTimeSamples();
@@ -96,8 +95,9 @@ public sealed class NeverQueuedCallTests
         using var scope = new AssertionScope();
         scope.AddReportable("samples", samples.Describe());
         rig.Connected.Select(e => (e.QueueName, e.AgentId)).Should().Equal(
-            [(null, "1001")],
-            "the SDK knows the agent, so app_queue's connect announces the call once, carrying the agent, as before");
+            [(null, null)],
+            "the member's answer connects the call and announces it, naming no agent; the agent's connect that follows "
+            + "finds the call connected and announces nothing");
         samples.Milliseconds.Should().HaveCount(0,
             "the SDK never saw the call join a queue, so it records no queue wait, as before");
     }

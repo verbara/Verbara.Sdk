@@ -37,6 +37,20 @@ public abstract record SessionDomainEvent(string SessionId, string ServerId, Dat
 public sealed record CallStartedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     CallDirection Direction, string? CallerIdNum) : SessionDomainEvent(SessionId, ServerId, Timestamp);
 
+/// <summary>
+/// Reports that the call entered <see cref="CallSessionState.Connected"/> because someone answered: raised once each
+/// time the call's transition into connected succeeds from <see cref="CallSessionState.Dialing"/>,
+/// <see cref="CallSessionState.Ringing"/>, <see cref="CallSessionState.Queued"/> or
+/// <see cref="CallSessionState.Transferring"/>, whichever report made it (a leg's answer, a dial outcome, a bridge entry,
+/// the connect of an agent known by name, or app_queue's report of the connection), while the session engine holds the
+/// call's lock. None is raised for a return from hold, which <see cref="CallResumedEvent"/> reports, for a call a state
+/// reload or the admission of existing calls opens connected, for an answer by the dialplan while the call is still in
+/// its initial state, or for a report that finds the call already connected.
+/// </summary>
+/// <remarks>
+/// When it is delivered the call is connected and <see cref="CallSession.ConnectedAt"/> is set; the call's first one
+/// carries, as <see cref="SessionDomainEvent.Timestamp"/>, the instant <see cref="CallSession.ConnectedAt"/> holds.
+/// </remarks>
 public sealed record CallConnectedEvent(string SessionId, string ServerId, DateTimeOffset Timestamp,
     string? AgentId, string? QueueName, TimeSpan WaitTime) : SessionDomainEvent(SessionId, ServerId, Timestamp)
 {
