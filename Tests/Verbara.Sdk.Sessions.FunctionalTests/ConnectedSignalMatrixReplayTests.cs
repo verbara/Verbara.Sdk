@@ -244,6 +244,9 @@ internal static class SignalMatrix
 
         public List<CallEndedEvent> Endings { get; } = [];
 
+        /// <summary>The state the call read when each of its <see cref="Endings"/> was delivered.</summary>
+        public List<CallSessionState> StatesWhenEnded { get; } = [];
+
         /// <summary>Every notification the call published, in the order it was delivered.</summary>
         public List<SessionDomainEvent> Log { get; } = [];
 
@@ -281,7 +284,10 @@ internal static class SignalMatrix
                 case CallHeldEvent: Held++; break;
                 case CallResumedEvent: Resumed++; break;
                 case CallTransferredEvent: Transferred++; break;
-                case CallEndedEvent e: Endings.Add(e); break;
+                case CallEndedEvent e:
+                    Endings.Add(e);
+                    StatesWhenEnded.Add(Session.State);
+                    break;
             }
         }
 
@@ -297,7 +303,7 @@ internal static class SignalMatrix
             + $"announcements=[{string.Join(", ", Announcements.Select(a => $"{a.Event.QueueName}|{a.Event.AgentInterface}|{a.State}"))}] "
             + $"queued=[{string.Join(", ", StatesWhenQueued)}] held={Held} resumed={Resumed} transferred={Transferred} "
             + $"cause={Session?.HangupCause?.ToString() ?? "null"} talk={Session?.TalkTime} "
-            + $"endings=[{string.Join(", ", Endings.Select(e => e.Cause?.ToString() ?? "null"))}]";
+            + $"endings=[{string.Join(", ", Endings.Select(e => $"{e.Cause?.ToString() ?? "null"}|{e.FinalState?.ToString() ?? "null"}"))}]";
     }
 
     private static string? Field(ManagerEvent e, string key) => e.RawFields?.GetValueOrDefault(key);

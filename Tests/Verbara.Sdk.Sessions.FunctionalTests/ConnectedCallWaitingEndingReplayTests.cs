@@ -26,6 +26,7 @@ namespace Verbara.Sdk.Sessions.FunctionalTests;
 /// No capture holds <c>aq-hangup-01</c> in the reversed order, so <see cref="Reordered"/> builds it: a copy of the
 /// 22.12.0 capture's step in memory with the caller's <c>Hangup</c> frame moved before the ringing member leg's, and,
 /// for the abnormal twin, the two frames' causes changed. Those frames are synthetic, parsed by the SDK's own reader.
+/// The abnormal twin also shows the state its <see cref="CallEndedEvent"/> carries.
 /// </para>
 /// </remarks>
 public sealed class ConnectedCallWaitingEndingReplayTests
@@ -142,6 +143,25 @@ public sealed class ConnectedCallWaitingEndingReplayTests
             "the call's cause is the caller's own, not the normal clearing of the leg reported last");
         run.Endings.Should().ContainSingle("the call ends once")
             .Which.Cause.Should().Be(HangupCause.UserBusy, "the ending carries the caller's own cause");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CallEndedEvent_ShouldCarryFailed_WhenTheCallerOfAConnectedCallWaitingInALaterQueueHangsUpAbnormally(
+        bool reloadWhileWaiting)
+    {
+        var call = await SignalMatrix.ReadAsync(
+            Reordered(callerCause: HangupCause.UserBusy, memberCause: HangupCause.NormalClearing), AnsweredThenQueued);
+        var run = reloadWhileWaiting ? await SignalMatrix.ReloadAsync(call) : await SignalMatrix.LiveAsync(call);
+
+        using var scope = new AssertionScope();
+        scope.AddReportable("run", run.Describe);
+        run.Session.Should().NotBeNull("premise: the replay opens the caller's call");
+        run.Endings.Select(e => e.FinalState).Should().Equal([CallSessionState.Failed],
+            "the call ends once, failed, because its caller's own channel hung up abnormally, and its ending says so");
+        run.StatesWhenEnded.Should().Equal([CallSessionState.Failed],
+            "the call reads the state its ending carries when the ending is delivered");
     }
 
     /// <summary>
