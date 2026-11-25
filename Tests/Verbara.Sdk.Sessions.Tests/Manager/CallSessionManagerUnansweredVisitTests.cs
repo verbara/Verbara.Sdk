@@ -396,6 +396,7 @@ public sealed class CallSessionManagerUnansweredVisitTests
         session.State.Should().Be(CallSessionState.Connected, "the unhold of a call on hold returns it to connected");
         rig.Events.OfType<CallResumedEvent>().Should().ContainSingle("the call resumed once");
     }
+
     /// <summary>
     /// A never-connected call that was dialing or ringing before its visit is back there after the visit ends
     /// unanswered, and nobody has answered it: its own answer (the dialplan's <c>Answer()</c>) or its entering a bridge
@@ -543,6 +544,61 @@ public sealed class CallSessionManagerUnansweredVisitTests
         session.ConnectedAt.Should().NotBeNull("someone answered the call");
         session.State.Should().Be(CallSessionState.Completed, "a connected call that hangs up normally completed");
     }
+
+    /// <summary>
+    /// A never-connected call back in <see cref="CallSessionState.Ringing"/> after an unanswered visit whose caller the
+    /// dialplan sends into a bridge where someone already is (a conference, or a bridge the caller is joined to with a
+    /// party of another call): no other channel of the call reports, so the caller's own entry is the only report of
+    /// the connection, and with another channel in the bridge (<c>BridgeNumChannels: 2</c>) it connects the call. The
+    /// control: entering a bridge alone (<c>BridgeNumChannels: 1</c>) does not. The frames are synthetic: no capture
+    /// holds such a bridge.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CallSession_ShouldConnectOnlyWhenSomeoneElseIsInTheBridge_WhenACallBackInRingingAfterAnUnansweredVisitEntersOne(
+        bool someoneIsThere)
+    {
+        await using var rig = await WrapUpRig.StartAsync(new FakeTimeProvider());
+        rig.Deliver(DialFailsThenVisitTimesOut(extensionRings: true));
+        var session = rig.Session(Caller);
+        const string party = "p1";
+        rig.Deliver(BridgeCreate("conference"));
+        if (someoneIsThere)
+            rig.Deliver(
+                NewChannel(party, "PJSIP/party-p1", "Up", party, context: "conference"),
+                BridgeEnterWith("conference", party, numChannels: 1));
+        rig.Deliver(BridgeEnterWith("conference", Caller, numChannels: someoneIsThere ? 2 : 1));
+        var afterEntry = session.State;
+
+        rig.Deliver(Hangup(Caller));
+
+        using var scope = new AssertionScope();
+        var connected = rig.Events.OfType<CallConnectedEvent>().Where(e => e.SessionId == session.SessionId);
+        if (someoneIsThere)
+        {
+            afterEntry.Should().Be(CallSessionState.Connected, "the caller entered a bridge where someone already is");
+            var connection = connected.Should().ContainSingle("the connection is announced once").Which;
+            connection.QueueName.Should().BeNull("the connection answers no queue visit");
+            connection.AgentId.Should().BeNull("no queue member made the connection");
+            connection.AgentInterface.Should().BeNull("no queue member made the connection");
+            session.ConnectedAt.Should().NotBeNull("the caller was bridged with someone");
+            session.State.Should().Be(CallSessionState.Completed, "a connected call that hangs up normally completed");
+        }
+        else
+        {
+            afterEntry.Should().Be(CallSessionState.Ringing, "the caller alone in a bridge is no answer");
+            connected.Should().BeEmpty("nothing connected the call");
+            session.ConnectedAt.Should().BeNull("nobody answered the call");
+            session.State.Should().Be(CallSessionState.Failed, "nobody answered the call");
+        }
+    }
+
+    private static BridgeEnterEvent BridgeEnterWith(string bridgeId, string uniqueId, int numChannels) => new()
+    {
+        EventType = "BridgeEnter", BridgeUniqueid = bridgeId, UniqueId = uniqueId,
+        BridgeNumChannels = numChannels.ToString(System.Globalization.CultureInfo.InvariantCulture),
+    };
 
     /// <summary>
     /// A call on hold that is blind-transferred stays on hold until its held channel is taken off it: the transfer does

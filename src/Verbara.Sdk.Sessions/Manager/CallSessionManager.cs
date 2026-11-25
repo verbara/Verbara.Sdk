@@ -1382,8 +1382,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 return;
 
             // A never-connected call back from an unanswered visit is not connected by its waiting channel entering a
-            // bridge: only by the entry of another channel of the call, someone who answered.
-            if (session.IsUnansweredWaitingCallersOwnReport(uniqueId))
+            // bridge alone: only by the entry of another channel of the call, someone who answered, or by the caller
+            // entering a bridge where someone already is, a party the manager may not index to the call (a conference,
+            // a leg of another call). The bridge's count is read after this entry, which the bridge manager applied
+            // before raising it, so it counts the caller and whoever was already there.
+            if (session.IsUnansweredWaitingCallersOwnReport(uniqueId) && bridge.NumChannels < 2)
             {
                 if (returned)
                     _ = PersistAsync(session);

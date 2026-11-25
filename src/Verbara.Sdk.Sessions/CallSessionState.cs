@@ -17,7 +17,8 @@ public enum CallSessionState
     /// here. A call that ends here before any member answers ends <see cref="Failed"/> when it was never connected, a call
     /// the dialplan answered included. So does a never-connected call back from such a visit (in its initial, dialing or
     /// ringing state) that nobody answered since: its own channel's answer or its entering a bridge alone connects
-    /// nothing, while a dial it makes that someone answers connects it and is announced. One that was connected before (a
+    /// nothing, while a dial it makes that someone answers, or its entering a bridge where someone already is, connects
+    /// it and is announced. One that was connected before (a
     /// reload or an admission that opened it connected included) ends <see cref="Completed"/> when its caller's own
     /// channel hangs up with normal clearing or a reload proves it gone, and <see cref="Failed"/> on any other cause of
     /// that channel.

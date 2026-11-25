@@ -486,7 +486,8 @@ public sealed class CallSession
     /// <see cref="CallSessionState.Ringing"/> after a queue visit that ended unanswered (and has dialed on from there,
     /// if it was back in its initial state) and nobody has answered it since.
     /// Until then a report of the channel that waited in the queue does not connect it
-    /// (<see cref="IsUnansweredWaitingCallersOwnReport"/>): only someone else answering does. Set by
+    /// (<see cref="IsUnansweredWaitingCallersOwnReport"/>): only someone else answering, or the caller entering a bridge
+    /// where someone already is, does. Set by
     /// <see cref="TryReturnFromUnansweredVisit"/>, cleared by the call's next connection and at each visit the manager
     /// opens. Written only under <see cref="SyncRoot"/>; not persisted.
     /// </summary>
@@ -495,8 +496,9 @@ public sealed class CallSession
     /// <summary>
     /// Whether a report of channel <paramref name="uniqueId"/> is the waiting channel's own while the call awaits an
     /// answer after an unanswered visit (<see cref="AwaitingAnswerAfterUnansweredVisit"/>): its answer (the dialplan's
-    /// <c>Answer()</c>) or its entering a bridge alone. Nobody answered the call, so such a report does not connect it;
-    /// a dial outcome of ANSWER, or another channel of the call answering or entering a bridge, does. Read under
+    /// <c>Answer()</c>) or its entering a bridge. Nobody answered the call, so such a report does not connect it;
+    /// a dial outcome of ANSWER, another channel of the call answering or entering a bridge, or the caller entering a
+    /// bridge where someone already is, does: the bridge entry handler checks the bridge's count. Read under
     /// <see cref="SyncRoot"/>.
     /// </summary>
     internal bool IsUnansweredWaitingCallersOwnReport(string uniqueId) => AwaitingAnswerAfterUnansweredVisit
