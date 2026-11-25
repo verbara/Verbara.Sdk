@@ -1323,7 +1323,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
                 return;
 
             var returned = ReturnFromUnansweredVisit(session, channel.UniqueId);
-            if (session.TryTransition(CallSessionState.Connected))
+
+            // An unhold resumes only a call whose hold the manager counted. Asterisk also reports one when a channel
+            // enters a bridge, with no hold before it: from any other state it is no answer, so it moves and
+            // publishes nothing (a connection is made only by an answer, a dial outcome, a bridge entry or app_queue).
+            if (session.State == CallSessionState.OnHold && session.TryTransition(CallSessionState.Connected))
             {
                 session.EndHold();
                 session.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
