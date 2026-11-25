@@ -222,6 +222,32 @@ public sealed class ConnectedCallWaitingEndingReplayTests
     }
 
     /// <summary>
+    /// The same ending as <see cref="CallSession_ShouldEndOnTheCallersObservedCause_WhenAReloadThenProvesTheRestOfTheWaitingCallGone"/>:
+    /// the caller's own cause decides it, but the last departure the call knows of, the ringing member leg's, was
+    /// learned from the reload's snapshot, not from a <c>Hangup</c>. The session keeps the ending-provenance marker
+    /// (<c>Metadata["cause"] = "reload"</c>) that says so, whichever cause decides the ending.
+    /// </summary>
+    [Theory]
+    [InlineData(HangupCause.UserBusy)]
+    [InlineData(HangupCause.NormalClearing)]
+    public async Task CallSession_ShouldKeepTheReloadEndingMarker_WhenAReloadProvesTheRestOfAWaitingCallGoneAfterItsCallersHangUp(
+        HangupCause callerCause)
+    {
+        var whole = await SignalMatrix.ReadAsync(Reordered(callerCause, memberCause: null), AnsweredThenQueued);
+        var memberHangup = HangupIndex(whole, RingingMemberLeg(whole).UniqueId);
+        var call = whole with { Frames = [.. whole.Frames.Take(memberHangup)] };
+        var run = await SignalMatrix.ReconnectingAsync(call,
+            new SignalMatrix.Reconnect(memberHangup, StatusEnd(whole), QueueStatusEnd(whole)));
+
+        using var scope = new AssertionScope();
+        scope.AddReportable("run", run.Describe);
+        run.Endings.Should().ContainSingle("premise: the reload ends the call once")
+            .Which.Cause.Should().Be(callerCause, "premise: the caller's own cause decides the ending");
+        run.Session!.Metadata.GetValueOrDefault("cause").Should().Be("reload",
+            "the reload proved the call's remaining leg gone: its last departure was learned from a snapshot");
+    }
+
+    /// <summary>
     /// After the caller's own abnormal hang-up, a first reconnect's reload finds the caller's channel alive again, beside
     /// the ringing member leg (the capture's own <c>Status</c> rows and <c>QueueStatus</c> at <c>wait</c>, and the
     /// member leg's synthetic row), and a second one finds nothing. The cause recorded for a channel that is alive again
