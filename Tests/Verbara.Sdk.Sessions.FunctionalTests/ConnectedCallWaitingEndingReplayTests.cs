@@ -165,6 +165,152 @@ public sealed class ConnectedCallWaitingEndingReplayTests
     }
 
     /// <summary>
+    /// A reconnect falls between the caller's own abnormal hang-up and the normal hang-up of the ringing member leg, and
+    /// its reload still finds that leg. The reconnect may have lost events, so the call forgets the departures it had
+    /// recorded, but not the cause Asterisk reported on the caller's own channel: a channel that hung up does not come
+    /// back. The reload's <c>Status</c> row of the member leg is synthetic (no capture holds a reconnect at that point),
+    /// written with the leg's own channel, uniqueid and linkedid from the capture.
+    /// </summary>
+    [Fact]
+    public async Task CallSession_ShouldEndFailedWithTheCallersCause_WhenAReconnectFallsBetweenTheCallersAbnormalHangUpAndTheMemberLegs()
+    {
+        var call = await SignalMatrix.ReadAsync(
+            Reordered(callerCause: HangupCause.UserBusy, memberCause: HangupCause.NormalClearing), AnsweredThenQueued);
+        var member = RingingMemberLeg(call);
+        var memberHangup = HangupIndex(call, member.UniqueId);
+        var status = await SyntheticStatusAsync(member.Channel, member.UniqueId, call.CallerUniqueId);
+        var run = await SignalMatrix.ReconnectingAsync(call,
+            new SignalMatrix.Reconnect(memberHangup, status, QueueStatusEnd(call)));
+
+        using var scope = new AssertionScope();
+        scope.AddReportable("run", run.Describe);
+        run.StateAt("reconnected-1").Should().Be(CallSessionState.Queued,
+            "premise: the caller hung up, and the call still waits in the later queue with its member leg ringing");
+        run.Session!.State.Should().Be(CallSessionState.Failed,
+            "the caller's own channel hung up with a cause other than normal clearing, before the reconnect");
+        run.Session.HangupCause.Should().Be(HangupCause.UserBusy,
+            "the reconnect does not erase the cause the caller's own channel reported");
+        run.Endings.Should().ContainSingle("the call ends once")
+            .Which.Cause.Should().Be(HangupCause.UserBusy, "the ending carries the caller's own cause");
+    }
+
+    /// <summary>
+    /// A reconnect falls after the caller's own hang-up, and its completed reload no longer finds the ringing member
+    /// leg: the reload proves the rest of the call gone. The caller's own hang-up was observed, so its cause decides
+    /// the ending; a reload's ending with no cause is for a call whose caller's hang-up was not observed. The reload
+    /// answers with the list-complete frames the capture took at <c>wait</c>.
+    /// </summary>
+    [Theory]
+    [InlineData(HangupCause.UserBusy, CallSessionState.Failed)]
+    [InlineData(HangupCause.NormalClearing, CallSessionState.Completed)]
+    public async Task CallSession_ShouldEndOnTheCallersObservedCause_WhenAReloadThenProvesTheRestOfTheWaitingCallGone(
+        HangupCause callerCause, CallSessionState expected)
+    {
+        var whole = await SignalMatrix.ReadAsync(Reordered(callerCause, memberCause: null), AnsweredThenQueued);
+        var memberHangup = HangupIndex(whole, RingingMemberLeg(whole).UniqueId);
+        var call = whole with { Frames = [.. whole.Frames.Take(memberHangup)] };
+        var run = await SignalMatrix.ReconnectingAsync(call,
+            new SignalMatrix.Reconnect(memberHangup, StatusEnd(whole), QueueStatusEnd(whole)));
+
+        using var scope = new AssertionScope();
+        scope.AddReportable("run", run.Describe);
+        run.StateAt("reconnected-1").Should().NotBeNull("premise: the replay opened the caller's call");
+        run.Session!.State.Should().Be(expected, "the caller's own channel's cause decides the ending");
+        run.Session.HangupCause.Should().Be(callerCause, "the call's cause is the one its caller's own channel reported");
+        run.Endings.Should().ContainSingle("the call ends once")
+            .Which.Cause.Should().Be(callerCause, "the ending carries the caller's own cause");
+    }
+
+    /// <summary>
+    /// After the caller's own abnormal hang-up, a first reconnect's reload finds the caller's channel alive again, beside
+    /// the ringing member leg (the capture's own <c>Status</c> rows and <c>QueueStatus</c> at <c>wait</c>, and the
+    /// member leg's synthetic row), and a second one finds nothing. The cause recorded for a channel that is alive again
+    /// no longer says how the caller left, so the second reload ends the call as a reload ends a connected call waiting
+    /// in a queue: completed, with no cause. A caller's channel listed alive after its hang-up is synthetic: no capture
+    /// holds it, and Asterisk does not reuse a uniqueid.
+    /// </summary>
+    [Fact]
+    public async Task CallSession_ShouldForgetTheCallersCause_WhenAReloadFindsTheCallersChannelAliveAgain()
+    {
+        var whole = await SignalMatrix.ReadAsync(
+            Reordered(callerCause: HangupCause.UserBusy, memberCause: null), AnsweredThenQueued);
+        var memberHangup = HangupIndex(whole, RingingMemberLeg(whole).UniqueId);
+        var member = RingingMemberLeg(whole);
+        var wait = whole.Checkpoints.Single(c => c.Name == "wait");
+        var callerAlive = OfAction(whole, wait.StatusId).Where(f => f.EventType == "Status").ToList();
+        var status = await SyntheticStatusAsync(member.Channel, member.UniqueId, whole.CallerUniqueId,
+            listed: callerAlive.Count + 1);
+        var call = whole with { Frames = [.. whole.Frames.Take(memberHangup)] };
+        var run = await SignalMatrix.ReconnectingAsync(call,
+            new SignalMatrix.Reconnect(memberHangup, [.. callerAlive, .. status], OfAction(whole, wait.QueueStatusId)),
+            new SignalMatrix.Reconnect(memberHangup, StatusEnd(whole), QueueStatusEnd(whole)));
+
+        using var scope = new AssertionScope();
+        scope.AddReportable("run", run.Describe);
+        run.StateAt("reconnected-1").Should().Be(CallSessionState.Queued,
+            "premise: the first reload finds the caller waiting in the later queue");
+        run.Session!.State.Should().Be(CallSessionState.Completed,
+            "the second reload proves a connected call gone while it waits, and no cause of its caller stands");
+        run.Session.HangupCause.Should().BeNull("the cause recorded before the caller's channel was found alive again is forgotten");
+        run.Endings.Should().ContainSingle("the call ends once");
+    }
+
+    /// <summary>The ringing member leg of the call: the one <see cref="Reordered"/> moves the caller's hang-up before.</summary>
+    private static (string Channel, string UniqueId) RingingMemberLeg(SignalMatrix.Call call)
+    {
+        var legs = call.Frames.Where(f => f.EventType == "Hangup"
+                && Raw(f, "Uniqueid") != call.CallerUniqueId && Raw(f, "Linkedid") == call.CallerUniqueId
+                && Raw(f, "ChannelStateDesc") == "Ringing")
+            .Select(f => (Raw(f, "Channel")!, Raw(f, "Uniqueid")!)).ToList();
+        return legs.Count == 1
+            ? legs[0]
+            : throw new InvalidOperationException($"premise: one ringing member leg hangs up, found {legs.Count}");
+    }
+
+    private static int HangupIndex(SignalMatrix.Call call, string uniqueId)
+    {
+        var found = call.Frames.Select((f, i) => (f, i))
+            .Where(x => x.f.EventType == "Hangup" && Raw(x.f, "Uniqueid") == uniqueId).Select(x => x.i).ToList();
+        return found.Count == 1
+            ? found[0]
+            : throw new InvalidOperationException($"premise: one Hangup frame of {uniqueId}, found {found.Count}");
+    }
+
+    /// <summary>The frames of the capture's answer to the action <paramref name="actionId"/>.</summary>
+    private static List<ManagerEvent> OfAction(SignalMatrix.Call call, string? actionId) =>
+        actionId is null
+            ? throw new InvalidOperationException("premise: the checkpoint names its snapshot")
+            : [.. call.Frames.Where(f => Raw(f, "ActionID") == actionId)];
+
+    /// <summary>The <c>StatusComplete</c> the capture took at <c>wait</c>, and none of its rows.</summary>
+    private static List<ManagerEvent> StatusEnd(SignalMatrix.Call call) =>
+        [.. OfAction(call, call.Checkpoints.Single(c => c.Name == "wait").StatusId).Where(f => f.EventType == "StatusComplete")];
+
+    /// <summary>The <c>QueueStatusComplete</c> the capture took at <c>wait</c>, and none of its rows.</summary>
+    private static List<ManagerEvent> QueueStatusEnd(SignalMatrix.Call call) =>
+        [.. OfAction(call, call.Checkpoints.Single(c => c.Name == "wait").QueueStatusId)
+            .Where(f => f.EventType == "QueueStatusComplete")];
+
+    /// <summary>
+    /// A synthetic <c>Status</c> row of one ringing channel and the list's end, which counts <paramref name="listed"/>
+    /// rows, parsed by the SDK's own reader: the row's fields are the ones Asterisk's <c>Status</c> rows carry for a
+    /// channel's identity and state.
+    /// </summary>
+    private static async Task<IReadOnlyList<ManagerEvent>> SyntheticStatusAsync(string channel, string uniqueId, string linkedId,
+        int listed = 1)
+    {
+        var items = listed.ToString(CultureInfo.InvariantCulture);
+        var text = "Asterisk Call Manager/11.0.0\r\n"
+            + "Event: Status\r\nPrivilege: Call\r\nChannel: " + channel + "\r\nChannelState: 5\r\nChannelStateDesc: Ringing\r\n"
+            + "Uniqueid: " + uniqueId + "\r\nLinkedid: " + linkedId + "\r\nApplication: AppQueue\r\nData: (Outgoing Line)\r\n"
+            + "ActionID: synthetic-status\r\n\r\n"
+            + "Event: StatusComplete\r\nActionID: synthetic-status\r\nEventList: Complete\r\nListItems: " + items + "\r\nItems: " + items + "\r\n\r\n";
+        return await AmiCaptureReplay.ReadCaptureAsync(Encoding.Latin1.GetBytes(text));
+    }
+
+    private static string? Raw(ManagerEvent f, string key) => f.RawFields?.GetValueOrDefault(key);
+
+    /// <summary>
     /// The 22.12.0 window capture with <c>aq-hangup-01</c>'s tail reordered: the caller's <c>Hangup</c> frame is moved
     /// before app_queue's <c>Hangup</c> of the ringing <c>q-second</c> member leg, and the two frames trade their
     /// timestamps so the capture stays in time order. A non-null cause replaces that frame's <c>Cause</c> and

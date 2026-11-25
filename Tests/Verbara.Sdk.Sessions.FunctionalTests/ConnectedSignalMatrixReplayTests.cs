@@ -521,4 +521,77 @@ internal static class SignalMatrix
 
         return run;
     }
+
+    /// <summary>
+    /// A reconnect before the frame at <paramref name="BeforeFrame"/> of a call's frames: the manager detaches the server,
+    /// keeping its calls, and attaches it again, a new attachment that demotes the calls it kept; then the connection
+    /// reconnects, and its reload's <c>Status</c> and <c>QueueStatus</c> are answered with <paramref name="Status"/> and
+    /// <paramref name="QueueStatus"/>.
+    /// </summary>
+    internal sealed record Reconnect(int BeforeFrame, IReadOnlyList<ManagerEvent> Status,
+        IReadOnlyList<ManagerEvent> QueueStatus);
+
+    /// <summary>
+    /// Delivers every live frame of <paramref name="call"/>, in order, to a fresh server and manager, and runs each of
+    /// <paramref name="reconnects"/> (detach, attach, reload) before the frame it names, in the order given. A reconnect at
+    /// or past the last frame runs after every frame was delivered. Each reconnect is marked <c>reconnected-N</c>,
+    /// N counted from 1.
+    /// </summary>
+    public static async Task<Run> ReconnectingAsync(Call call, params Reconnect[] reconnects)
+    {
+        var connection = new ReloadableConnection();
+        var server = new VerbaraServer(connection.Connection, NullLogger<VerbaraServer>.Instance);
+        var manager = new CallSessionManager(Options.Create(new SessionOptions()), NullLogger<CallSessionManager>.Instance,
+            new InMemorySessionStore());
+        var run = new Run(call.CallerUniqueId, manager.GetByChannelId);
+        var next = 0;
+        try
+        {
+            using var subscription = manager.Events.Subscribe(run.On);
+            manager.AttachToServer(server, "reconnect-replay");
+            await server.StartAsync();
+            for (var i = 0; i <= call.Frames.Count; i++)
+            {
+                while (next < reconnects.Length && (reconnects[next].BeforeFrame <= i || i == call.Frames.Count))
+                {
+                    manager.DetachFromServer("reconnect-replay");
+                    manager.AttachToServer(server, "reconnect-replay");
+                    await connection.ReloadAsync(reconnects[next].Status, reconnects[next].QueueStatus);
+                    next++;
+                    run.Mark($"reconnected-{next.ToString(CultureInfo.InvariantCulture)}");
+                }
+
+                if (i == call.Frames.Count)
+                    break;
+
+                var f = call.Frames[i];
+                if (IsUserEvent(f, "CaptureCheckpoint"))
+                {
+                    run.Mark(Field(f, "Name") ?? "");
+                    continue;
+                }
+
+                if (!IsLive(f))
+                    continue;
+
+                try
+                {
+                    connection.Observer.OnNext(f);
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    run.Swallowed++;
+                }
+
+                run.Bind();
+            }
+        }
+        finally
+        {
+            await manager.DisposeAsync();
+            await server.DisposeAsync();
+        }
+
+        return run;
+    }
 }
