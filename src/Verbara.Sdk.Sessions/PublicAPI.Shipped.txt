@@ -245,8 +245,6 @@ static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.Meter -> System.
 static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsCompleted -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsCreated -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsFailed -> System.Diagnostics.Metrics.Counter<long>!
-static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsOrphaned -> System.Diagnostics.Metrics.Counter<long>!
-static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.SessionsTimedOut -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.TalkTimeMs -> System.Diagnostics.Metrics.Histogram<double>!
 static readonly Verbara.Sdk.Sessions.Diagnostics.SessionMetrics.WaitTimeMs -> System.Diagnostics.Metrics.Histogram<double>!
 virtual Verbara.Sdk.Sessions.Extensions.AgentSelectorBase.RankAgentsAsync(Verbara.Sdk.Live.Queues.AsteriskQueue! queue, Verbara.Sdk.Sessions.CallSession! session, System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Live.Agents.AsteriskAgent!>! candidates, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Verbara.Sdk.Live.Agents.AsteriskAgent!>!>
@@ -515,3 +513,23 @@ static Verbara.Sdk.Sessions.SessionEventEpoch.operator !=(Verbara.Sdk.Sessions.S
 static Verbara.Sdk.Sessions.SessionEventEpoch.operator ==(Verbara.Sdk.Sessions.SessionEventEpoch left, Verbara.Sdk.Sessions.SessionEventEpoch right) -> bool
 ~override Verbara.Sdk.Sessions.SessionEventEpoch.Equals(object obj) -> bool
 ~override Verbara.Sdk.Sessions.SessionEventEpoch.ToString() -> string
+Verbara.Sdk.Sessions.AsteriskInstanceIdentity
+Verbara.Sdk.Sessions.AsteriskInstanceIdentity.<Clone>$() -> Verbara.Sdk.Sessions.AsteriskInstanceIdentity!
+Verbara.Sdk.Sessions.AsteriskInstanceIdentity.AsteriskInstanceIdentity(string! systemName) -> void
+Verbara.Sdk.Sessions.AsteriskInstanceIdentity.Equals(Verbara.Sdk.Sessions.AsteriskInstanceIdentity? other) -> bool
+Verbara.Sdk.Sessions.AsteriskInstanceIdentity.SystemName.get -> string!
+Verbara.Sdk.Sessions.CallConnectedEvent.AgentInterface.get -> string?
+Verbara.Sdk.Sessions.CallConnectedEvent.AgentInterface.init -> void
+Verbara.Sdk.Sessions.CallEndedEvent.FinalState.get -> Verbara.Sdk.Sessions.CallSessionState?
+Verbara.Sdk.Sessions.CallEndedEvent.FinalState.init -> void
+Verbara.Sdk.Sessions.CallRingNoAnswerEvent.AgentInterface.get -> string?
+Verbara.Sdk.Sessions.CallRingNoAnswerEvent.AgentInterface.init -> void
+Verbara.Sdk.Sessions.ISessionStore.GetByLinkedIdAsync(string! serverId, string! linkedId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Sessions.CallSession?>
+Verbara.Sdk.Sessions.SessionDomainEvent.Instance.get -> Verbara.Sdk.Sessions.AsteriskInstanceIdentity?
+Verbara.Sdk.Sessions.SessionDomainEvent.Instance.init -> void
+override Verbara.Sdk.Sessions.AsteriskInstanceIdentity.Equals(object? obj) -> bool
+override Verbara.Sdk.Sessions.AsteriskInstanceIdentity.GetHashCode() -> int
+override Verbara.Sdk.Sessions.AsteriskInstanceIdentity.ToString() -> string!
+static Verbara.Sdk.Sessions.AsteriskInstanceIdentity.operator !=(Verbara.Sdk.Sessions.AsteriskInstanceIdentity? left, Verbara.Sdk.Sessions.AsteriskInstanceIdentity? right) -> bool
+static Verbara.Sdk.Sessions.AsteriskInstanceIdentity.operator ==(Verbara.Sdk.Sessions.AsteriskInstanceIdentity? left, Verbara.Sdk.Sessions.AsteriskInstanceIdentity? right) -> bool
+virtual Verbara.Sdk.Sessions.Extensions.SessionStoreBase.GetByLinkedIdAsync(string! serverId, string! linkedId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Sessions.CallSession?>

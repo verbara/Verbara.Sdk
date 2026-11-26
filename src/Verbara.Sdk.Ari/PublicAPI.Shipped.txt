@@ -431,8 +431,6 @@ Verbara.Sdk.Ari.Resources.AriBridgesResource.CreateWithIdAsync(string! bridgeId,
 Verbara.Sdk.Ari.Resources.AriBridgesResource.DestroyAsync(string! bridgeId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Verbara.Sdk.Ari.Resources.AriBridgesResource.GetAsync(string! bridgeId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriBridge!>
 Verbara.Sdk.Ari.Resources.AriBridgesResource.ListAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriBridge![]!>
-Verbara.Sdk.Ari.Resources.AriBridgesResource.PlayAsync(string! bridgeId, string! media, string? lang = null, int? offsetms = null, int? skipms = null, string? playbackId = null, string? format = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriPlayback!>
-Verbara.Sdk.Ari.Resources.AriBridgesResource.RecordAsync(string! bridgeId, string! name, string! recordingFormat, int? maxDurationSeconds = null, int? maxSilenceSeconds = null, string? ifExists = null, bool? beep = null, string? terminateOn = null, string? format = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriLiveRecording!>
 Verbara.Sdk.Ari.Resources.AriBridgesResource.RemoveChannelAsync(string! bridgeId, string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Verbara.Sdk.Ari.Resources.AriBridgesResource.SetVideoSourceAsync(string! bridgeId, string! channelId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Verbara.Sdk.Ari.Resources.AriBridgesResource.StartMohAsync(string! bridgeId, string? mohClass = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
@@ -529,7 +527,6 @@ static readonly Verbara.Sdk.Ari.Diagnostics.AriMetrics.Meter -> System.Diagnosti
 static readonly Verbara.Sdk.Ari.Diagnostics.AriMetrics.Reconnections -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.Ari.Diagnostics.AriMetrics.RestRequestsSent -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.Ari.Diagnostics.AriMetrics.RestRoundtripMs -> System.Diagnostics.Metrics.Histogram<double>!
-static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.BufferUnderruns -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.BytesReceived -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.BytesSent -> System.Diagnostics.Metrics.Counter<long>!
 static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.ErrorFrames -> System.Diagnostics.Metrics.Counter<long>!
@@ -542,14 +539,9 @@ static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.StreamsClosed -> 
 static readonly Verbara.Sdk.Ari.Diagnostics.AudioStreamMetrics.StreamsOpened -> System.Diagnostics.Metrics.Counter<long>!
 Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.ChanWebSocketControlMessage() -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.ChanWebSocketControlMessage(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage! original) -> void
-Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.Deconstruct(out string! Digit, out int DurationMs) -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf? other) -> bool
-Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.Deconstruct(out string? Cause) -> void
-Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketHangup? other) -> bool
 Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.Deconstruct(out string! Mark) -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia? other) -> bool
-Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.Deconstruct(out int Bytes) -> void
-Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering? other) -> bool
 Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.Deconstruct(out string! Mark) -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed? other) -> bool
 Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Deconstruct(out string! Format, out int Rate, out int Channels) -> void
@@ -578,19 +570,11 @@ override Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.<Clone>$() -> Verbara.Sdk.Ari.A
 override Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.Equals(object? obj) -> bool
 override Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.GetHashCode() -> int
 override Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.ToString() -> string!
-override Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketHangup!
-override Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.Equals(object? obj) -> bool
-override Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.GetHashCode() -> int
-override Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.ToString() -> string!
 override Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.GetTypeInfo(System.Type! type) -> System.Text.Json.Serialization.Metadata.JsonTypeInfo?
 override Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia!
 override Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.Equals(object? obj) -> bool
 override Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.GetHashCode() -> int
 override Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.ToString() -> string!
-override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering!
-override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.Equals(object? obj) -> bool
-override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.GetHashCode() -> int
-override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.ToString() -> string!
 override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.<Clone>$() -> Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed!
 override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.Equals(object? obj) -> bool
 override Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.GetHashCode() -> int
@@ -613,9 +597,7 @@ override Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.GetHashCode() -> i
 override Verbara.Sdk.Ari.Audio.ChanWebSocketSetMediaDirection.ToString() -> string!
 override Verbara.Sdk.Ari.Resources.AriJsonContext.GetTypeInfo(System.Type! type) -> System.Text.Json.Serialization.Metadata.JsonTypeInfo?
 override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
-override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
 override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
-override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
 override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
 override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
 override sealed Verbara.Sdk.Ari.Audio.ChanWebSocketMediaXoff.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? other) -> bool
@@ -625,13 +607,9 @@ static Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.operator !=(Verbara.Sdk
 static Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? left, Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage? right) -> bool
 static Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf? left, Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf? right) -> bool
 static Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf? left, Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf? right) -> bool
-static Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketHangup? left, Verbara.Sdk.Ari.Audio.ChanWebSocketHangup? right) -> bool
-static Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketHangup? left, Verbara.Sdk.Ari.Audio.ChanWebSocketHangup? right) -> bool
 static Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.Default.get -> Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext!
 static Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia? right) -> bool
 static Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia? right) -> bool
-static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering? right) -> bool
-static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering? right) -> bool
 static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed? right) -> bool
 static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed? right) -> bool
 static Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart.operator !=(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart? left, Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart? right) -> bool
@@ -648,9 +626,7 @@ virtual Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.Equals(Verbara.Sdk.Ari
 virtual Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage.PrintMembers(System.Text.StringBuilder! builder) -> bool
 ~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketControlMessage.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessage>
 ~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketDtmf.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf>
-~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketHangup.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketHangup>
 ~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketMarkMedia.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia>
-~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketMediaBuffering.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering>
 ~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketMediaDirection.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection>
 ~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketMediaMarkProcessed.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketMediaMarkProcessed>
 ~Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketMediaStart.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart>
@@ -771,13 +747,10 @@ Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageFormat.Json = 1 -> Verbara.Sdk.
 Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageFormat.PlainText = 0 -> Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageFormat
 Verbara.Sdk.Ari.Audio.ChanWebSocketControlMessageSerializer
 Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf
-Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.ChanWebSocketDtmf(string! Digit, int DurationMs) -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.ChannelId.get -> string?
 Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.ChannelId.init -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.Digit.get -> string!
 Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.Digit.init -> void
-Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.DurationMs.get -> int
-Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.DurationMs.init -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketError
 Verbara.Sdk.Ari.Audio.ChanWebSocketError.ChanWebSocketError(string! ChannelId, string! ErrorText) -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketError.ChannelId.get -> string!
@@ -786,10 +759,6 @@ Verbara.Sdk.Ari.Audio.ChanWebSocketError.Deconstruct(out string! ChannelId, out 
 Verbara.Sdk.Ari.Audio.ChanWebSocketError.Equals(Verbara.Sdk.Ari.Audio.ChanWebSocketError? other) -> bool
 Verbara.Sdk.Ari.Audio.ChanWebSocketError.ErrorText.get -> string!
 Verbara.Sdk.Ari.Audio.ChanWebSocketError.ErrorText.init -> void
-Verbara.Sdk.Ari.Audio.ChanWebSocketHangup
-Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.Cause.get -> string?
-Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.Cause.init -> void
-Verbara.Sdk.Ari.Audio.ChanWebSocketHangup.ChanWebSocketHangup(string? Cause) -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext
 Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketJsonContext() -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketJsonContext.ChanWebSocketJsonContext(System.Text.Json.JsonSerializerOptions! options) -> void
@@ -797,10 +766,6 @@ Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia
 Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.ChanWebSocketMarkMedia(string! Mark) -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.Mark.get -> string!
 Verbara.Sdk.Ari.Audio.ChanWebSocketMarkMedia.Mark.init -> void
-Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering
-Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.Bytes.get -> int
-Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.Bytes.init -> void
-Verbara.Sdk.Ari.Audio.ChanWebSocketMediaBuffering.ChanWebSocketMediaBuffering(int Bytes) -> void
 Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection
 Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection.Both = 2 -> Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection
 Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection.In = 0 -> Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection
@@ -860,8 +825,6 @@ Verbara.Sdk.Ari.Audio.IChanWebSocketSession.ControlMessages.get -> System.IObser
 Verbara.Sdk.Ari.Audio.IChanWebSocketSession.MediaStart.get -> Verbara.Sdk.Ari.Audio.ChanWebSocketMediaStart?
 Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendMarkAsync(string! mark, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendSetMediaDirectionAsync(Verbara.Sdk.Ari.Audio.ChanWebSocketMediaDirection direction, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
-Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendXoffAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
-Verbara.Sdk.Ari.Audio.IChanWebSocketSession.SendXonAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 Verbara.Sdk.Ari.Outbound.AriOutboundConnection
 Verbara.Sdk.Ari.Outbound.AriOutboundConnection.ApplicationName.get -> string!
 Verbara.Sdk.Ari.Outbound.AriOutboundConnection.ConnectedAt.get -> System.DateTimeOffset
@@ -1067,3 +1030,7 @@ static Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.operator !=(Verbara
 static Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering.operator ==(Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering? left, Verbara.Sdk.Ari.Audio.ChanWebSocketStopMediaBuffering? right) -> bool
 ~Verbara.Sdk.Ari.Resources.AriJsonContext.NullableUInt32.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<uint?>
 ~Verbara.Sdk.Ari.Resources.AriJsonContext.UInt32.get -> System.Text.Json.Serialization.Metadata.JsonTypeInfo<uint>
+Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.ChanWebSocketDtmf(string! Digit) -> void
+Verbara.Sdk.Ari.Audio.ChanWebSocketDtmf.Deconstruct(out string! Digit) -> void
+Verbara.Sdk.Ari.Resources.AriBridgesResource.PlayAsync(string! bridgeId, string! media, string? lang = null, int? offsetms = null, int? skipms = null, string? playbackId = null, string? announcerFormat = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriPlayback!>
+Verbara.Sdk.Ari.Resources.AriBridgesResource.RecordAsync(string! bridgeId, string! name, string! recordingFormat, int? maxDurationSeconds = null, int? maxSilenceSeconds = null, string? ifExists = null, bool? beep = null, string? terminateOn = null, string? recorderFormat = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.AriLiveRecording!>

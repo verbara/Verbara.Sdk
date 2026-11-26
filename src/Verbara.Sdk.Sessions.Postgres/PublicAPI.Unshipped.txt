@@ -1,2 +1,1 @@
 #nullable enable
-override Verbara.Sdk.Sessions.Postgres.PostgresSessionStore.GetByLinkedIdAsync(string! serverId, string! linkedId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Sessions.CallSession?>

@@ -169,12 +169,6 @@ Verbara.Sdk.Ami.Actions.DbGetTreeAction.Family.get -> string?
 Verbara.Sdk.Ami.Actions.DbGetTreeAction.Family.set -> void
 Verbara.Sdk.Ami.Actions.DbGetTreeAction.Key.get -> string?
 Verbara.Sdk.Ami.Actions.DbGetTreeAction.Key.set -> void
-Verbara.Sdk.Ami.Actions.DbPrefixGetAction
-Verbara.Sdk.Ami.Actions.DbPrefixGetAction.DbPrefixGetAction() -> void
-Verbara.Sdk.Ami.Actions.DbPrefixGetAction.Family.get -> string?
-Verbara.Sdk.Ami.Actions.DbPrefixGetAction.Family.set -> void
-Verbara.Sdk.Ami.Actions.DbPrefixGetAction.Key.get -> string?
-Verbara.Sdk.Ami.Actions.DbPrefixGetAction.Key.set -> void
 Verbara.Sdk.Ami.Actions.DbPutAction
 Verbara.Sdk.Ami.Actions.DbPutAction.DbPutAction() -> void
 Verbara.Sdk.Ami.Actions.DbPutAction.Family.get -> string?
@@ -221,10 +215,6 @@ Verbara.Sdk.Ami.Actions.EventsAction
 Verbara.Sdk.Ami.Actions.EventsAction.EventMask.get -> string?
 Verbara.Sdk.Ami.Actions.EventsAction.EventMask.set -> void
 Verbara.Sdk.Ami.Actions.EventsAction.EventsAction() -> void
-Verbara.Sdk.Ami.Actions.ExecAction
-Verbara.Sdk.Ami.Actions.ExecAction.Command.get -> string?
-Verbara.Sdk.Ami.Actions.ExecAction.Command.set -> void
-Verbara.Sdk.Ami.Actions.ExecAction.ExecAction() -> void
 Verbara.Sdk.Ami.Actions.ExtensionStateAction
 Verbara.Sdk.Ami.Actions.ExtensionStateAction.Context.get -> string?
 Verbara.Sdk.Ami.Actions.ExtensionStateAction.Context.set -> void
@@ -3028,40 +3018,6 @@ Verbara.Sdk.Ami.Events.InvalidTransportEvent
 Verbara.Sdk.Ami.Events.InvalidTransportEvent.AttemptedTransport.get -> string?
 Verbara.Sdk.Ami.Events.InvalidTransportEvent.AttemptedTransport.set -> void
 Verbara.Sdk.Ami.Events.InvalidTransportEvent.InvalidTransportEvent() -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.JitterBufStatsEvent() -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.LocalDropped.get -> int?
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.LocalDropped.set -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.LocalJbDelay.get -> int?
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.LocalJbDelay.set -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.LocalJitter.get -> int?
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.LocalJitter.set -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.LocalLossPercent.get -> int?
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.LocalLossPercent.set -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.Localooo.get -> int?
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.Localooo.set -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.LocalReceived.get -> int?
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.LocalReceived.set -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.LocalTotalLost.get -> int?
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.LocalTotalLost.set -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.Owner.get -> string?
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.Owner.set -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.Ping.get -> int?
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.Ping.set -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.RemoteDropped.get -> int?
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.RemoteDropped.set -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.RemoteJbDelay.get -> int?
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.RemoteJbDelay.set -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.RemoteJitter.get -> int?
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.RemoteJitter.set -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.RemoteLossPercent.get -> int?
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.RemoteLossPercent.set -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.Remoteooo.get -> int?
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.Remoteooo.set -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.RemoteReceived.get -> int?
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.RemoteReceived.set -> void
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.RemoteTotalLost.get -> int?
-Verbara.Sdk.Ami.Events.JitterBufStatsEvent.RemoteTotalLost.set -> void
 Verbara.Sdk.Ami.Events.ListDialplanEvent
 Verbara.Sdk.Ami.Events.ListDialplanEvent.AppData.get -> string?
 Verbara.Sdk.Ami.Events.ListDialplanEvent.AppData.set -> void
@@ -3326,20 +3282,6 @@ Verbara.Sdk.Ami.Events.LogChannelEvent.Reason.get -> int?
 Verbara.Sdk.Ami.Events.LogChannelEvent.Reason.set -> void
 Verbara.Sdk.Ami.Events.LogChannelEvent.ReasonTxt.get -> string?
 Verbara.Sdk.Ami.Events.LogChannelEvent.ReasonTxt.set -> void
-Verbara.Sdk.Ami.Events.MasqueradeEvent
-Verbara.Sdk.Ami.Events.MasqueradeEvent.Clone.get -> string?
-Verbara.Sdk.Ami.Events.MasqueradeEvent.Clone.set -> void
-Verbara.Sdk.Ami.Events.MasqueradeEvent.CloneStateDesc.get -> string?
-Verbara.Sdk.Ami.Events.MasqueradeEvent.CloneStateDesc.set -> void
-Verbara.Sdk.Ami.Events.MasqueradeEvent.CloneState.get -> int?
-Verbara.Sdk.Ami.Events.MasqueradeEvent.CloneState.set -> void
-Verbara.Sdk.Ami.Events.MasqueradeEvent.MasqueradeEvent() -> void
-Verbara.Sdk.Ami.Events.MasqueradeEvent.Original.get -> string?
-Verbara.Sdk.Ami.Events.MasqueradeEvent.Original.set -> void
-Verbara.Sdk.Ami.Events.MasqueradeEvent.OriginalStateDesc.get -> string?
-Verbara.Sdk.Ami.Events.MasqueradeEvent.OriginalStateDesc.set -> void
-Verbara.Sdk.Ami.Events.MasqueradeEvent.OriginalState.get -> int?
-Verbara.Sdk.Ami.Events.MasqueradeEvent.OriginalState.set -> void
 Verbara.Sdk.Ami.Events.MCIDEvent
 Verbara.Sdk.Ami.Events.MCIDEvent.LinkedId.get -> string?
 Verbara.Sdk.Ami.Events.MCIDEvent.LinkedId.set -> void
@@ -3652,16 +3594,6 @@ Verbara.Sdk.Ami.Events.PresenceStatusEvent.Status.get -> string?
 Verbara.Sdk.Ami.Events.PresenceStatusEvent.Status.set -> void
 Verbara.Sdk.Ami.Events.PresenceStatusEvent.Subtype.get -> string?
 Verbara.Sdk.Ami.Events.PresenceStatusEvent.Subtype.set -> void
-Verbara.Sdk.Ami.Events.PriEventEvent
-Verbara.Sdk.Ami.Events.PriEventEvent.DChannel.get -> string?
-Verbara.Sdk.Ami.Events.PriEventEvent.DChannel.set -> void
-Verbara.Sdk.Ami.Events.PriEventEvent.PriEventCode.get -> int?
-Verbara.Sdk.Ami.Events.PriEventEvent.PriEventCode.set -> void
-Verbara.Sdk.Ami.Events.PriEventEvent.PriEventEvent() -> void
-Verbara.Sdk.Ami.Events.PriEventEvent.PriEvent.get -> string?
-Verbara.Sdk.Ami.Events.PriEventEvent.PriEvent.set -> void
-Verbara.Sdk.Ami.Events.PriEventEvent.Span.get -> int?
-Verbara.Sdk.Ami.Events.PriEventEvent.Span.set -> void
 Verbara.Sdk.Ami.Events.ProtocolIdentifierReceivedEvent
 Verbara.Sdk.Ami.Events.ProtocolIdentifierReceivedEvent.ProtocolIdentifier.get -> string?
 Verbara.Sdk.Ami.Events.ProtocolIdentifierReceivedEvent.ProtocolIdentifierReceivedEvent() -> void
@@ -4150,24 +4082,6 @@ Verbara.Sdk.Ami.Events.RtcpSentEvent.ToPort.get -> int?
 Verbara.Sdk.Ami.Events.RtcpSentEvent.ToPort.set -> void
 Verbara.Sdk.Ami.Events.RtcpSentEvent.Uniqueid.get -> string?
 Verbara.Sdk.Ami.Events.RtcpSentEvent.Uniqueid.set -> void
-Verbara.Sdk.Ami.Events.RtpReceiverStatEvent
-Verbara.Sdk.Ami.Events.RtpReceiverStatEvent.AccountCode.get -> string?
-Verbara.Sdk.Ami.Events.RtpReceiverStatEvent.AccountCode.set -> void
-Verbara.Sdk.Ami.Events.RtpReceiverStatEvent.ReceivedPackets.get -> long?
-Verbara.Sdk.Ami.Events.RtpReceiverStatEvent.ReceivedPackets.set -> void
-Verbara.Sdk.Ami.Events.RtpReceiverStatEvent.RrCount.get -> long?
-Verbara.Sdk.Ami.Events.RtpReceiverStatEvent.RrCount.set -> void
-Verbara.Sdk.Ami.Events.RtpReceiverStatEvent.RtpReceiverStatEvent() -> void
-Verbara.Sdk.Ami.Events.RtpReceiverStatEvent.Transit.get -> double?
-Verbara.Sdk.Ami.Events.RtpReceiverStatEvent.Transit.set -> void
-Verbara.Sdk.Ami.Events.RtpSenderStatEvent
-Verbara.Sdk.Ami.Events.RtpSenderStatEvent.RtpSenderStatEvent() -> void
-Verbara.Sdk.Ami.Events.RtpSenderStatEvent.Rtt.get -> double?
-Verbara.Sdk.Ami.Events.RtpSenderStatEvent.Rtt.set -> void
-Verbara.Sdk.Ami.Events.RtpSenderStatEvent.SentPackets.get -> long?
-Verbara.Sdk.Ami.Events.RtpSenderStatEvent.SentPackets.set -> void
-Verbara.Sdk.Ami.Events.RtpSenderStatEvent.SrCount.get -> long?
-Verbara.Sdk.Ami.Events.RtpSenderStatEvent.SrCount.set -> void
 Verbara.Sdk.Ami.Events.SendFaxEvent
 Verbara.Sdk.Ami.Events.SendFaxEvent.AccountCode.get -> string?
 Verbara.Sdk.Ami.Events.SendFaxEvent.AccountCode.set -> void
@@ -4239,18 +4153,10 @@ Verbara.Sdk.Ami.Events.StatusCompleteEvent.StatusCompleteEvent() -> void
 Verbara.Sdk.Ami.Events.StatusEvent
 Verbara.Sdk.Ami.Events.StatusEvent.AccountCode.get -> string?
 Verbara.Sdk.Ami.Events.StatusEvent.AccountCode.set -> void
-Verbara.Sdk.Ami.Events.StatusEvent.Account.get -> string?
-Verbara.Sdk.Ami.Events.StatusEvent.Account.set -> void
 Verbara.Sdk.Ami.Events.StatusEvent.Application.get -> string?
 Verbara.Sdk.Ami.Events.StatusEvent.Application.set -> void
-Verbara.Sdk.Ami.Events.StatusEvent.BridgedChannel.get -> string?
-Verbara.Sdk.Ami.Events.StatusEvent.BridgedChannel.set -> void
-Verbara.Sdk.Ami.Events.StatusEvent.BridgedUniqueId.get -> string?
-Verbara.Sdk.Ami.Events.StatusEvent.BridgedUniqueId.set -> void
 Verbara.Sdk.Ami.Events.StatusEvent.BridgeId.get -> string?
 Verbara.Sdk.Ami.Events.StatusEvent.BridgeId.set -> void
-Verbara.Sdk.Ami.Events.StatusEvent.CallerId.get -> string?
-Verbara.Sdk.Ami.Events.StatusEvent.CallerId.set -> void
 Verbara.Sdk.Ami.Events.StatusEvent.CallGroup.get -> string?
 Verbara.Sdk.Ami.Events.StatusEvent.CallGroup.set -> void
 Verbara.Sdk.Ami.Events.StatusEvent.Channel.get -> string?
@@ -4269,8 +4175,6 @@ Verbara.Sdk.Ami.Events.StatusEvent.Language.get -> string?
 Verbara.Sdk.Ami.Events.StatusEvent.Language.set -> void
 Verbara.Sdk.Ami.Events.StatusEvent.LinkedId.get -> string?
 Verbara.Sdk.Ami.Events.StatusEvent.LinkedId.set -> void
-Verbara.Sdk.Ami.Events.StatusEvent.Link.get -> string?
-Verbara.Sdk.Ami.Events.StatusEvent.Link.set -> void
 Verbara.Sdk.Ami.Events.StatusEvent.NativeFormats.get -> string?
 Verbara.Sdk.Ami.Events.StatusEvent.NativeFormats.set -> void
 Verbara.Sdk.Ami.Events.StatusEvent.PickupGroup.get -> string?
@@ -4281,8 +4185,6 @@ Verbara.Sdk.Ami.Events.StatusEvent.Readtrans.get -> string?
 Verbara.Sdk.Ami.Events.StatusEvent.Readtrans.set -> void
 Verbara.Sdk.Ami.Events.StatusEvent.Seconds.get -> int?
 Verbara.Sdk.Ami.Events.StatusEvent.Seconds.set -> void
-Verbara.Sdk.Ami.Events.StatusEvent.State.get -> string?
-Verbara.Sdk.Ami.Events.StatusEvent.State.set -> void
 Verbara.Sdk.Ami.Events.StatusEvent.StatusEvent() -> void
 Verbara.Sdk.Ami.Events.StatusEvent.TimeToHangup.get -> string?
 Verbara.Sdk.Ami.Events.StatusEvent.TimeToHangup.set -> void
@@ -4811,3 +4713,5 @@ Verbara.Sdk.Ami.Events.NewExtenEvent.Exten.get -> string?
 Verbara.Sdk.Ami.Events.NewExtenEvent.Exten.set -> void
 Verbara.Sdk.Ami.Events.NewExtenEvent.Priority.get -> int?
 Verbara.Sdk.Ami.Events.NewExtenEvent.Priority.set -> void
+Verbara.Sdk.Ami.Actions.SendFlashAction.Receive.get -> bool?
+Verbara.Sdk.Ami.Actions.SendFlashAction.Receive.set -> void
