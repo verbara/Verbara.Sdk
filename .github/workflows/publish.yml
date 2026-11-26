@@ -220,9 +220,20 @@ jobs:
       # The old check ran after the packages were already on nuget.org and only
       # warned, falling back to a pointer body. A grep for the heading would not
       # have caught the failure it was guarding either: with `## [2.5.0] - …`
-      # immediately followed by `## [2.4.0] - …`, the heading exists and this awk
-      # still extracts zero lines. Running the extraction itself is the only check
-      # that agrees with what the Release step will do.
+      # immediately followed by `## [2.4.0] - …`, the heading exists and the
+      # extraction still yields zero lines. Running the extraction itself is the
+      # only check that agrees with what the Release step will do.
+      #
+      # GitHub caps a release body at 125,000 characters and `gh release create`
+      # runs AFTER the push, so the size is settled here too. A body that fits is
+      # the version's CHANGELOG section plus the package list, as it always was. A
+      # body that does not fit no longer fails the release: the script publishes a
+      # shorter one with a ::warning — a link to CHANGELOG.md at the tag, every
+      # BREAKING entry in full and the heading of every other entry, or, if that is
+      # still too long, the headings alone. Only a section that cannot fit even as
+      # a list of headings, or an empty one, fails here, pre-push, where failing is
+      # free. The rules and their tests: scripts/ci/build-release-notes.sh and
+      # scripts/tests/test_build_release_notes.sh.
       # ---------------------------------------------------------------------
       - name: Build release notes from CHANGELOG.md
         # Runs on a DRY RUN too, deliberately. Everything it needs is the resolved
@@ -233,61 +244,11 @@ jobs:
         #
         # This also turns `workflow_dispatch` into a release-readiness check: bump
         # the version, dispatch, and the run fails until CHANGELOG.md has a section
-        # for it that is neither empty nor over the cap.
+        # for it that is not empty, and its ::warning says ahead of the tag whether
+        # the release will carry the full notes or the shorter body.
         env:
           VERSION: ${{ steps.identity.outputs.version }}
-        run: |
-          set -euo pipefail
-
-          # This version's own section: everything between its heading
-          # (`## [2.4.0] - 2026-07-26`) and the next `## [` heading.
-          awk -v v="$VERSION" '
-            index($0, "## [" v "]") == 1 { grab = 1; next }
-            grab && index($0, "## [") == 1 { exit }
-            grab { print }
-          ' CHANGELOG.md > release-notes.md
-
-          if [ ! -s release-notes.md ]; then
-            echo "::error::CHANGELOG.md has no content under a '## [$VERSION]' heading. Write the section, then re-tag."
-            exit 1
-          fi
-
-          # Drop trailing blank lines and any horizontal rule the section ended on,
-          # so the footer below contributes the only `---` in the body.
-          awk '{ line[NR] = $0 }
-               END { last = NR
-                     while (last > 0 && (line[last] ~ /^[[:space:]]*$/ || line[last] == "---")) last--
-                     for (i = 1; i <= last; i++) print line[i] }' release-notes.md > release-notes.trimmed
-          mv release-notes.trimmed release-notes.md
-
-          {
-            printf '\n---\n\n'
-            printf 'Packages published to [nuget.org](https://www.nuget.org/profiles/verbara) at version `%s`:\n\n' "$VERSION"
-            for f in ./artifacts/*.nupkg; do
-              [ -e "$f" ] || continue
-              base="$(basename "$f" .nupkg)"
-              printf -- '- `%s`\n' "${base%".$VERSION"}"
-            done
-          } >> release-notes.md
-
-          # GitHub caps a release body at 125,000 characters and `gh release create`
-          # runs AFTER the push, so a body that does not fit would publish 29 packages
-          # and then fail to announce them. Measured here, pre-push, where failing is free.
-          # Bytes, not characters: `wc -m` depends on a UTF-8 locale the runner does not
-          # guarantee, and for this file bytes over-count, which errs toward blocking.
-          BODY_LIMIT=125000
-          BODY_BYTES="$(wc -c < release-notes.md)"
-
-          if [ "$BODY_BYTES" -gt "$BODY_LIMIT" ]; then
-            echo "::error::Release body is $BODY_BYTES bytes, over GitHub's $BODY_LIMIT-character cap. Split the CHANGELOG section before tagging."
-            exit 1
-          fi
-
-          if [ "$BODY_BYTES" -gt $(( BODY_LIMIT * 9 / 10 )) ]; then
-            echo "::warning::Release body is $BODY_BYTES bytes — over 90% of GitHub's $BODY_LIMIT-character cap. The next release of this size will not fit."
-          fi
-
-          echo "Release notes: $(wc -l < release-notes.md) lines, $BODY_BYTES bytes."
+        run: bash scripts/ci/build-release-notes.sh "$VERSION" CHANGELOG.md ./artifacts
 
       # ---------------------------------------------------------------------
       # Trusted Publishing login. nuget.org trusts this repository's `publish.yml` through a policy owned by the

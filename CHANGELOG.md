@@ -880,6 +880,14 @@ waiting, for how many days since the last tag, and whether to cut a release. A d
 when to cut is the maintainer's call. An `[Unreleased]` section past 90% of the release-body cap still fails, because
 past the cap GitHub refuses the release itself. A version staged but never tagged still fails too. No package changes.
 
+### Changed: a release whose notes exceed GitHub's limit publishes a shortened description instead of failing (#NNN)
+
+GitHub caps a release description at 125,000 characters. A release whose CHANGELOG section did not fit used to stop
+before anything was published. It now publishes, and its release page carries a shortened description: a link to the
+full notes in `CHANGELOG.md` at the tag, every BREAKING entry in full, and the heading of every other entry. If even
+that does not fit, the page lists only the headings. A release whose notes fit gets the same description as before,
+byte for byte. The packages are unaffected.
+
 ## [2.10.1] - 2026-11-16
 
 ### Fixed: `CompositeAudioServer.OnStreamConnected` announces each stream as the server that accepted it does (#584)
