@@ -888,6 +888,15 @@ full notes in `CHANGELOG.md` at the tag, every BREAKING entry in full, and the h
 that does not fit, the page lists only the headings. A release whose notes fit gets the same description as before,
 byte for byte. The packages are unaffected.
 
+### Changed: release hygiene reports a staged release and a large changelog as notices (#NNN)
+
+`scripts/ci/check-publish-liveness.sh` no longer fails when a version is staged in `Directory.Build.props` but its tag
+is not pushed yet, or when the `[Unreleased]` CHANGELOG section passes 90% of GitHub's release-body cap. Both print a
+notice (`Release staged`, `Release notes size`) and the run stays green. The first went red on every release cut and
+stayed red through the testing between the version bump and the tag; the second no longer guards a blocker, because a
+release whose notes do not fit now publishes a shortened description. The check fails only when it cannot tell: no
+`<PackageVersion>`, no git repository, a shallow clone, or no `v*` tags. No package changes.
+
 ## [2.10.1] - 2026-11-16
 
 ### Fixed: `CompositeAudioServer.OnStreamConnected` announces each stream as the server that accepted it does (#584)
