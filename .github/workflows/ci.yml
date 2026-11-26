@@ -215,6 +215,12 @@ jobs:
       - name: Run release provenance gate unit tests (ADR-0055)
         run: bash scripts/tests/test_release_provenance.sh
 
+      # Release-notes builder unit tests. publish.yml builds the release body with this script before the push, and
+      # runs only on a tag or a dispatch, so no PR ever exercises it. A broken one fails a release that is waiting on
+      # it, or announces it with the wrong notes. Same job, same reason as the harnesses above.
+      - name: Run release-notes builder unit tests
+        run: bash scripts/tests/test_build_release_notes.sh
+
       # Perf-baseline guard unit tests (ADR-0042 D4/D5). The comparison itself runs weekly in
       # perf-regression.yml, which is `schedule` + `workflow_dispatch` only and can therefore never
       # tell a PR that its guard is broken. Its Python half rides the `unittest discover` step
