@@ -872,7 +872,7 @@ internal hosted service. No public API changes.
 
 To roll back, revert the package. A pool host then saves under a token that cannot be cancelled again.
 
-### Changed: release hygiene asks about a release that has waited, and fails only near the release-body cap (#NNN)
+### Changed: release hygiene asks about a release that has waited, and fails only near the release-body cap (#664)
 
 `scripts/ci/check-publish-liveness.sh` no longer fails when shipped content has waited past its budget (`STALE_DAYS`,
 still 14 days by default). The run stays green and carries a `Release cadence` notice: how many shipped paths are
