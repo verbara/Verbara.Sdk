@@ -1,4 +1,1 @@
 #nullable enable
-override Verbara.Sdk.Sessions.Redis.RedisSessionStore.GetByLinkedIdAsync(string! serverId, string! linkedId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.ValueTask<Verbara.Sdk.Sessions.CallSession?>
-Verbara.Sdk.Sessions.Redis.RedisSessionStoreOptions.ActiveRecordTtl.get -> System.TimeSpan?
-Verbara.Sdk.Sessions.Redis.RedisSessionStoreOptions.ActiveRecordTtl.set -> void
