@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-11-26
+
 ### Changed — BREAKING: six `StatusEvent` members and seven AMI types deprecated for 2.11.0 are removed (#621)
 
 The symbols whose 2.10.0 warning said "Removed in Verbara.Sdk 2.11.0." are gone from `Verbara.Sdk.Ami`, and their ids
