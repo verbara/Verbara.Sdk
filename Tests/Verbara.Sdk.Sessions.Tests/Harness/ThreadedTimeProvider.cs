@@ -44,11 +44,8 @@ internal sealed class ThreadedTimeProvider : TimeProvider
     public override DateTimeOffset GetUtcNow()
     {
         var readHold = Interlocked.Exchange(ref _readHold, null);
-        if (readHold is not null)
-        {
-            if (!readHold.Hold(Bound))
-                throw new TimeoutException("A held clock read was never released.");
-        }
+        if (readHold is not null && !readHold.Hold(Bound))
+            throw new TimeoutException("A held clock read was never released.");
 
         lock (_gate)
         {
@@ -125,11 +122,8 @@ internal sealed class ThreadedTimeProvider : TimeProvider
         {
             try
             {
-                if (hold is not null)
-                {
-                    if (!hold.Hold(Bound))
-                        throw new TimeoutException("A held timer callback was never released.");
-                }
+                if (hold is not null && !hold.Hold(Bound))
+                    throw new TimeoutException("A held timer callback was never released.");
 
                 timer.Fire();
             }
