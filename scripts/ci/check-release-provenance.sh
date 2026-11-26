@@ -10,10 +10,11 @@
 #
 # WHY RELEASE-HYGIENE. release-hygiene.yml runs on `push: main`, and a release commit reaches main by
 # a push like any other — so its checks run on the very commit about to be tagged, before the tag
-# exists. Publish Liveness then fails by design ("staged but never tagged"); if the run happens after
-# the tag instead, ApiCompat Baseline fails by design (the newest stable tag is above the baseline).
-# Both judge the repository against its tags, not whether this commit was built, and ADR-0055 D5
-# calls them notifications. Counted here, they were a hard block: v2.5.1 (2026-09-12) failed this
+# exists. Publish Liveness then failed by design ("staged but never tagged") — since 2026-11-26 it
+# reports that as a notice and stays green, but release commits from before then still carry the red
+# run; if the run happens after the tag instead, ApiCompat Baseline fails by design (the newest stable
+# tag is above the baseline). Both judge the repository against its tags, not whether this commit was
+# built, and ADR-0055 D5 calls them notifications. Counted here, they were a hard block: v2.5.1 (2026-09-12) failed this
 # gate with "1 failure, 14 success", naming nothing, and published only after both runs were re-run
 # by hand.
 #

@@ -195,25 +195,31 @@ new_repo
 changelog 120000   # past 90% of the 125,000-character cap, with no shipped change at all
 g add -A
 commit_at '2026-01-02T12:00:00' "docs: a very large changelog section"
-run "$LIVENESS" 1 "an [Unreleased] section past 90% of the cap fails on its own"
-says "release-body cap" "the cap failure names the cap"
-silent_on "::notice" "a cap failure with no aged content asks nothing"
+# Past 90% of the cap is a notice, not a failure: publish.yml publishes a shortened body (BREAKING
+# entries, headings and a link to CHANGELOG.md) when the section is over the cap, so the cap no
+# longer blocks a release. It is still worth saying, once, on its own annotation line.
+run "$LIVENESS" 0 "an [Unreleased] section past 90% of the cap is a notice, not a failure"
+says_line "::notice title=Release notes size::[Unreleased] is 120002 bytes, 96% of GitHub's 125000-character release-body cap — past the cap the release page gets a shortened body with a link to CHANGELOG.md; condense the section or cut a release." "the size notice is on its own line, with the measured bytes and percentage"
+says "release-body cap" "the size report names the cap"
+silent_on "FAILED" "the size half alone is not a failure"
+silent_on "Release cadence" "a large section with no aged content asks no time question"
 
-# Both halves at once: the size half still fails (it blocks the release itself), and the time
-# question is still printed alongside it.
+# Both halves at once: both notices, each on its own line, and still exit 0.
 new_repo
 echo '// changed' >> "$WORK/src/Foo/Foo.cs"
 commit_at '2026-01-02T12:00:00' "feat: ship something"
 changelog 120000
 g add -A
 commit_at '2026-02-01T12:00:00' "docs: a very large changelog section, much later"
-run "$LIVENESS" 1 "past the cap AND past the time budget still fails"
-says "release-body cap" "the combined failure names the cap"
-says_line "::notice title=Release cadence::1 consumer-visible path(s) waiting 30 days since v1.0.0 — cut a release?" "the combined failure still asks the time question, on its own line"
-says "30 days" "the combined failure reports the measured age"
+run "$LIVENESS" 0 "past the cap AND past the time budget prints both notices and exits 0"
+says "release-body cap" "the combined report names the cap"
+says_line "::notice title=Release cadence::1 consumer-visible path(s) waiting 30 days since v1.0.0 — cut a release?" "the combined report asks the time question, on its own line"
+says_line "::notice title=Release notes size::[Unreleased] is 120002 bytes, 96% of GitHub's 125000-character release-body cap — past the cap the release page gets a shortened body with a link to CHANGELOG.md; condense the section or cut a release." "the combined report raises the size notice, on its own line"
+says "30 days" "the combined report reports the measured age"
+silent_on "FAILED" "the combined report is not a failure"
 
 # A shipped change that was later reverted leaves nothing to release, so there is nothing to ask
-# about — even when the size half fails and the reverted commit is old.
+# about — even when the size half fires and the reverted commit is old.
 new_repo
 echo '// changed' >> "$WORK/src/Foo/Foo.cs"
 commit_at '2026-01-02T12:00:00' "feat: ship something"
@@ -222,8 +228,9 @@ commit_at '2026-01-03T12:00:00' "revert: ship something"
 changelog 120000
 g add -A
 commit_at '2026-02-01T12:00:00' "docs: a very large changelog section, much later"
-run "$LIVENESS" 1 "a reverted change with a large section still fails for size"
-silent_on "::notice" "a reverted change leaves no path waiting, so nothing is asked"
+run "$LIVENESS" 0 "a reverted change with a large section still reports the size"
+says_line "::notice title=Release notes size::[Unreleased] is 120002 bytes, 96% of GitHub's 125000-character release-body cap — past the cap the release page gets a shortened body with a link to CHANGELOG.md; condense the section or cut a release." "a reverted change with a large section still raises the size notice"
+silent_on "Release cadence" "a reverted change leaves no path waiting, so nothing is asked"
 
 new_repo
 changelog 1000
@@ -252,9 +259,10 @@ silent_on "Broken pipe" "a long path list never breaks the pipe"
 changelog 120000
 g add -A
 commit_at '2026-01-03T12:00:00' "docs: a very large changelog section"
-run "$LIVENESS" 1 "a long path list past the cap fails for the cap"
+run "$LIVENESS" 0 "a long path list past the cap reports the cap and exits 0"
 says "release-body cap" "a long path list past the cap names the cap"
-says "Fix: bump <PackageVersion>" "a long path list past the cap still reaches the fix line"
+says "::notice title=Release notes size::" "a long path list past the cap raises the size notice"
+says "Fix: condense the [Unreleased] section" "a long path list past the cap still reaches the fix line"
 silent_on "Broken pipe" "a long path list past the cap never breaks the pipe"
 [ "$(printf '%s\n' "$OUT" | command grep -c '^    src/Foo/')" -eq 30 ] && ok \
   || bad "a long path list past the cap is cut at 30 lines"
@@ -285,17 +293,62 @@ says "    Directory.Build.props" "a long Directory.Build.props diff does not hid
 # =============================================================================================
 # liveness — state A, and the cannot-tell case
 # =============================================================================================
+# State A is a notice, not a failure: on every release it fires on the intended path, between the
+# release PR's merge and the tag push, and a closing campaign can hold that window open for weeks.
 new_repo
 props 1.1.0 1.0.0
 commit_at '2026-01-02T12:00:00' "chore: stage 1.1.0"
-run "$LIVENESS" 1 "a staged version with no tag fails immediately"
-says "staged but never tagged" "state A is named"
+bump_sha="$(g rev-parse --short HEAD)"
+echo x > "$WORK/docs-note.txt"; g add -A
+commit_at '2026-01-05T12:00:00' "docs: after the bump"
+run "$LIVENESS" 0 "a staged version with no tag is a notice, not a failure"
+says_line "::notice title=Release staged::1.1.0 is staged since 2026-01-02 ($bump_sha), 1 commit(s) ago, and v1.1.0 does not exist yet — push the tag when the release is ready." "state A raises the notice on its own line, with date, sha and distance"
+says "staged but never tagged" "state A is named in the report"
 says "Staged since 2026-01-02" "state A reports when it was staged"
+says "git tag v1.1.0" "state A keeps the one-line fix"
+silent_on "FAILED" "state A is not a failure"
+
+# While state A holds, state B is not evaluated: its diff base is the staged version's tag, which
+# does not exist. A large section and old shipped content ask nothing until the tag is pushed.
+new_repo
+echo '// changed' >> "$WORK/src/Foo/Foo.cs"
+commit_at '2026-01-02T12:00:00' "feat: ship something"
+props 1.1.0 1.0.0
+changelog 120000
+g add -A
+commit_at '2026-02-01T12:00:00' "chore: stage 1.1.0 with a very large section"
+run "$LIVENESS" 0 "state A with state B's triggers present still exits 0"
+says "::notice title=Release staged::1.1.0 is staged since 2026-02-01" "state A's notice is raised"
+silent_on "Release notes size" "state B's size half is not evaluated while state A holds"
+silent_on "Release cadence" "state B's time half is not evaluated while state A holds"
+
+# A bump that is not committed yet has no commit to date: the notice says so without one.
+new_repo
+props 1.1.0 1.0.0
+run "$LIVENESS" 0 "an uncommitted staged version is a notice too"
+says_line "::notice title=Release staged::1.1.0 is staged and v1.1.0 does not exist yet — push the tag when the release is ready." "state A without a bump commit still raises a well-formed notice"
 
 new_repo
 echo '<Project />' > "$WORK/Directory.Build.props"
 commit_at '2026-01-02T12:00:00' "chore: drop the version"
 run "$LIVENESS" 2 "no <PackageVersion> is 'cannot tell', not 'fine'"
+
+# A broken checkout must not read as "staged": state A is now a green notice, so a missing tag
+# from a failed fetch, a shallow clone or no repository at all would otherwise pass silently.
+new_repo
+g tag -d v1.0.0 >/dev/null
+run "$LIVENESS" 2 "a repository with no release tags at all is 'cannot tell', not 'staged'"
+silent_on "Release staged" "no tags at all raises no staged notice"
+
+new_repo
+rm -rf "$WORK/.git"
+run "$LIVENESS" 2 "outside a git repository is 'cannot tell', not 'staged'"
+
+new_repo
+SRC="$WORK"; WORK="$(mktemp -d -p "$TMP_ROOT")"; rmdir "$WORK"
+git clone -q --depth 1 "file://$SRC" "$WORK" 2>/dev/null
+g fetch -q --tags 2>/dev/null || true
+run "$LIVENESS" 2 "a shallow clone is 'cannot tell', not 'staged' or 'fine'"
 
 # =============================================================================================
 # apicompat baseline

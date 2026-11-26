@@ -178,7 +178,7 @@ done
 #    - delete every src/**/CompatibilitySuppressions.xml
 ```
 
-Between the two PRs the **Release Hygiene** workflow reports two expected failures: after the release PR merges, *Publish Liveness* says the version is "staged but never tagged" until the tag is pushed; after the tag is pushed, *ApiCompat Baseline* says the baseline is behind the newest tag until the baseline PR merges (`scripts/ci/check-publish-liveness.sh`, `scripts/ci/check-apicompat-baseline.sh`). Neither blocks a merge or a publish.
+Between the two PRs the **Release Hygiene** workflow reports two expected states: after the release PR merges, *Publish Liveness* stays green and carries a "Release staged" notice (the version is staged but never tagged) until the tag is pushed; after the tag is pushed, *ApiCompat Baseline* fails, saying the baseline is behind the newest tag, until the baseline PR merges (`scripts/ci/check-publish-liveness.sh`, `scripts/ci/check-apicompat-baseline.sh`). Neither blocks a merge or a publish. *Publish Liveness* reports everything else it finds the same way, as notices on a green run — shipped content waiting a while ("Release cadence"), an `[Unreleased]` section near the release-body cap ("Release notes size") — and goes red only when it cannot read the version.
 
 If `publish.yml` refuses or fails, **do not delete and re-push the tag** — the `release-tags` ruleset blocks it for everyone except organisation admins, and no failure needs it:
 

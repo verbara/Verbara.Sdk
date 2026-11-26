@@ -138,9 +138,10 @@ jobs:
           #
           # Nor do two kinds of check run that say nothing about whether this commit was
           # built. release-hygiene.yml runs on the push that lands the release commit, before
-          # the tag exists, so its liveness check is red on exactly the commit being released
-          # — by design, as a notification (ADR-0055 D5) — and its baseline check is red
-          # instead if it runs after the tag; counted here, that blocked v2.5.1. Dependabot's
+          # the tag exists, so its liveness check was red on exactly the commit being released
+          # — by design, as a notification (ADR-0055 D5; a green run with a notice since
+          # 2026-11-26, older release commits keep the red one) — and its baseline check is red
+          # if it runs after the tag; counted here, that blocked v2.5.1. Dependabot's
           # update runs (GitHub-assigned path dynamic/dependabot/dependabot-updates) attach to
           # whatever commit is main's HEAD and often end cancelled. Both are excluded by
           # WORKFLOW PATH (check run -> check suite -> workflow run -> path), never by name,
