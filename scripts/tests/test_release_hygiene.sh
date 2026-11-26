@@ -106,7 +106,7 @@ silent_on() { # silent_on <needle> <description> — the output must NOT contain
 }
 
 says_line() { # says_line <exact line> <description> — GitHub reads a workflow command only at the start of a line
-  if printf '%s\n' "$OUT" | command grep -qxF -- "$1"; then ok; else bad "$2 — no line exactly '$1'"; fi
+  if printf '%s\n' "$OUT" | command grep -xF -- "$1" >/dev/null; then ok; else bad "$2 — no line exactly '$1'"; fi
 }
 
 # =============================================================================================
@@ -230,6 +230,57 @@ changelog 1000
 g add -A
 commit_at '2026-01-02T12:00:00' "docs: a small changelog section"
 run "$LIVENESS" 0 "a small [Unreleased] section is not a trigger"
+
+# =============================================================================================
+# liveness — a long path list must not break its own report
+# =============================================================================================
+# The path list used to go through `printf … | head -N`. Once the list outgrows the pipe, head
+# exits after N lines, printf takes SIGPIPE, and set -euo pipefail turns a green report into a
+# crash (exit 1, "printf: write error: Broken pipe"; main's release-hygiene runs, 2026-10, at
+# 218-240 paths). 3000 paths of ~100 bytes is ~300 KB, past any pipe buffer, so the old form fails
+# every run rather than by race.
+new_repo
+long="$(printf 'x%.0s' $(seq 1 80))"
+for i in $(seq 1 3000); do echo '// new' > "$WORK/src/Foo/F${i}_${long}.cs"; done
+g add -A
+commit_at '2026-01-02T12:00:00' "feat: ship many files"
+run "$LIVENESS" 0 "a long path list within budget is reported, not crashed on"
+says "… and 2990 more" "a long path list is cut at 10 with the remainder counted"
+says "Within budget" "a long path list still reaches the end of the report"
+silent_on "Broken pipe" "a long path list never breaks the pipe"
+
+changelog 120000
+g add -A
+commit_at '2026-01-03T12:00:00' "docs: a very large changelog section"
+run "$LIVENESS" 1 "a long path list past the cap fails for the cap"
+says "release-body cap" "a long path list past the cap names the cap"
+says "Fix: bump <PackageVersion>" "a long path list past the cap still reaches the fix line"
+silent_on "Broken pipe" "a long path list past the cap never breaks the pipe"
+[ "$(printf '%s\n' "$OUT" | command grep -c '^    src/Foo/')" -eq 30 ] && ok \
+  || bad "a long path list past the cap is cut at 30 lines"
+
+# The same shape hid inside two `grep -q` tests: grep -q exits on its first match, and the grep
+# feeding it takes SIGPIPE once its output outgrows the pipe — under pipefail that reads as "no
+# match", silently dropping a shipped change from the list.
+new_repo
+{ echo '<Project Sdk="Microsoft.NET.Sdk">'; echo '  <ItemGroup>'
+  for i in $(seq 1 3000); do echo "    <PackageReference Include=\"Shipped.Pkg\" Condition=\"'\$(N)' == '$i'\" />"; done
+  echo '  </ItemGroup>'; echo '</Project>'; } > "$WORK/src/Foo/Foo.csproj"
+g add -A
+commit_at "$BASE_DATE" "chore: many references"
+g tag -f v1.0.0 >/dev/null
+sed -i 's|Include="Shipped.Pkg" Version="1.0.0"|Include="Shipped.Pkg" Version="2.0.0"|' "$WORK/Directory.Packages.props"
+commit_at '2026-01-02T12:00:00' "chore: bump a shipped dependency"
+run "$LIVENESS" 0 "a shipped dependency referenced many times is still seen"
+says "Directory.Packages.props (ships: Shipped.Pkg)" "a long reference list does not hide a shipped bump"
+
+new_repo
+{ echo '<Project>'; echo '  <PropertyGroup>'; echo '    <PackageVersion>1.0.0</PackageVersion>'
+  for i in $(seq 1 3000); do echo "    <Prop$i>value-$i-$long</Prop$i>"; done
+  echo '  </PropertyGroup>'; echo '</Project>'; } > "$WORK/Directory.Build.props"
+commit_at '2026-01-02T12:00:00' "chore: many build properties"
+run "$LIVENESS" 0 "a long Directory.Build.props diff is still seen"
+says "    Directory.Build.props" "a long Directory.Build.props diff does not hide itself"
 
 # =============================================================================================
 # liveness — state A, and the cannot-tell case

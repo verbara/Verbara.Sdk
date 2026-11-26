@@ -87,7 +87,7 @@ BODY_WARN=$((BODY_LIMIT * 90 / 100))
 reaches_consumers() {
   grep -rh --include='*.csproj' 'PackageReference' src/ 2>/dev/null \
     | grep -F "Include=\"$1\"" \
-    | grep -qv 'PrivateAssets="all"'
+    | grep -v 'PrivateAssets="all"' >/dev/null
 }
 
 # consumer_visible_changes <base> [head] — one path per line, empty if nothing ships.
@@ -111,7 +111,7 @@ consumer_visible_changes() {
   if ! git diff --quiet "$range" -- Directory.Build.props 2>/dev/null; then
     if git diff -U0 "$range" -- Directory.Build.props \
          | grep -E '^[+-][^+-]' \
-         | grep -qvE 'PackageValidationBaselineVersion'; then
+         | grep -vE 'PackageValidationBaselineVersion' >/dev/null; then
       echo "Directory.Build.props"
     fi
   fi
@@ -140,7 +140,7 @@ changelog_section_bytes() {
   ' CHANGELOG.md | wc -c | tr -d ' '
 }
 
-version="$(sed -n 's:.*<PackageVersion>\(.*\)</PackageVersion>.*:\1:p' Directory.Build.props | head -1)"
+version="$(sed -n '\:<PackageVersion>.*</PackageVersion>:{s:.*<PackageVersion>\(.*\)</PackageVersion>.*:\1:p;q;}' Directory.Build.props)"
 if [ -z "$version" ]; then
   echo "publish-liveness: no <PackageVersion> in Directory.Build.props — cannot determine the tag" >&2
   exit 2
@@ -186,6 +186,10 @@ if [ "${#changed[@]}" -eq 0 ] && [ "$unreleased_bytes" -le "$BODY_WARN" ]; then
   exit 0
 fi
 
+# The path lists below are sliced, never piped into `head`: under pipefail a reader that stops
+# early hands the writer SIGPIPE, and a list past the pipe buffer turned a green report into a crash.
+# The `grep -v … >/dev/null` tests above read to the end for the same reason (`grep -q` stops early).
+
 # How long has the oldest unreleased shipped change been waiting?
 age_days=0
 oldest="$(first_shipping_commit "$tag")"
@@ -217,7 +221,7 @@ if [ "$size_due" -eq 0 ]; then
   ask_to_cut
   echo "publish-liveness: $tag is published; ${#changed[@]} consumer-visible path(s) have moved since."
   if [ "${#changed[@]}" -gt 0 ]; then
-    printf '    %s\n' "${changed[@]}" | head -10
+    printf '    %s\n' "${changed[@]:0:10}"
     [ "${#changed[@]}" -gt 10 ] && echo "    … and $(( ${#changed[@]} - 10 )) more"
   fi
   echo "  Oldest unreleased shipped change: $age_days day(s) (notice after $STALE_DAYS)."
@@ -245,7 +249,7 @@ echo "  until the version moves."
 echo
 echo "  Changed since $tag:"
 echo
-printf '    %s\n' "${changed[@]}" | head -30
+printf '    %s\n' "${changed[@]:0:30}"
 echo
 echo "  Fix: bump <PackageVersion> in Directory.Build.props and rename '## [Unreleased]' to the new"
 echo "  version in CHANGELOG.md — publish.yml refuses to release without that section, and hard-fails"
