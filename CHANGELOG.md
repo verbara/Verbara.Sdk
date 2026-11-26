@@ -880,7 +880,7 @@ waiting, for how many days since the last tag, and whether to cut a release. A d
 when to cut is the maintainer's call. An `[Unreleased]` section past 90% of the release-body cap still fails, because
 past the cap GitHub refuses the release itself. A version staged but never tagged still fails too. No package changes.
 
-### Changed: a release whose notes exceed GitHub's limit publishes a shortened description instead of failing (#NNN)
+### Changed: a release whose notes exceed GitHub's limit publishes a shortened description instead of failing (#666)
 
 GitHub caps a release description at 125,000 characters. A release whose CHANGELOG section did not fit used to stop
 before anything was published. It now publishes, and its release page carries a shortened description: a link to the
