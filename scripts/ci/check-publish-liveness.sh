@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-publish-liveness.sh — is a release owed (a failure), or only worth asking about (a notice)?
+# check-publish-liveness.sh — is a release waiting on something? It says so in notices; it fails only when it cannot tell.
 #
 # WHY THIS EXISTS. `publish.yml` triggers on `push: tags: v*` and nothing else; `ci.yml` runs on
 # `pull_request` + `merge_group` and deliberately drops the post-merge push run. Between them is a
@@ -14,7 +14,7 @@
 #   2026-08-25  v2.5.0 tagged. 88 commits, 19 of them touching src/
 # Nothing was broken and nothing was red. The cost showed up somewhere else: a month of entries
 # accumulated into one CHANGELOG section, which measured 117,711 characters against GitHub's
-# 125,000-character release-body cap — 94% of a limit that, once crossed, blocks the release itself.
+# 125,000-character release-body cap — 94% of a limit that, at the time, blocked the release itself once crossed.
 #
 # ADAPTED FROM Sdk.Pro's script of the same name, NOT copied, and the calibration is the reason.
 # Pro's `release.yml` runs on push to main and creates the tag itself, so unreleased content exists
@@ -22,15 +22,21 @@
 # monthly, so unreleased content is the NORMAL state — a check that fails on its mere existence
 # would be red most of every month, and a signal that is red most of the time protects nothing.
 # What is abnormal is unreleased content that has been waiting too long, or a CHANGELOG section
-# heading for the cap. Those are what this reports on: the cap as a failure, the waiting as a
-# question. See ADR-0055.
+# heading for the cap. Those are what this reports on, each as a GitHub Actions notice annotation
+# on the run's summary page. See ADR-0055.
 #
 # THE STATES
 #
-#   A. STAGED, NEVER CUT — <PackageVersion> names a version whose tag does not exist. Fails
-#      immediately, with no grace: the fix is one command, and on the intended path the window is
-#      minutes. One red run on a release you are already cutting costs a maintainer 20 minutes of
-#      annoyance; the silent version of this state cost three days.
+#   A. STAGED, NEVER CUT — <PackageVersion> names a version whose tag does not exist. A notice
+#      ("Release staged": the version, when and where it was staged, how many commits ago, and that
+#      the tag does not exist yet), the report and the one-line fix, then exit 0. It failed until the
+#      owner ruled on 2026-11-26 that it should not: measured over ten release cuts it fired on every
+#      one, always on the intended path between the release PR's merge and the tag push, and never
+#      caught a forgotten tag — while a closing campaign between the bump and the tag kept it red for
+#      40 hours (2.10.0) and could keep it red for weeks. A signal that is red on every release
+#      protects nothing; the notice keeps the state visible without that.
+#      While state A holds, state B is NOT evaluated: the script stops after state A, because state
+#      B diffs from the staged version's tag and that tag does not exist yet.
 #
 #   B. SHIPPED, THEN DRIFTED — the tag exists and consumer-visible content has landed on top of it.
 #      Reported always, with two triggers that are deliberately NOT the same kind of signal:
@@ -41,10 +47,12 @@
 #          It failed until the owner ruled on 2026-11-26 that a date is an estimate, not a deadline.
 #        * SIZE — the `[Unreleased]` CHANGELOG section is past 90% of the release-body cap, the same
 #          threshold publish.yml warns at, so the two agree rather than one surprising the other.
-#          This FAILS: past the cap GitHub refuses the release body, so it blocks the release itself.
-#      When both fire it fails for the size and still prints the time question. Within both it
-#      prints the drift and exits 0. That number being visible every week is the point; being red
-#      every week would not be.
+#          This is a notice too ("Release notes size"), plus the report, and exit 0: past the cap
+#          publish.yml publishes a shortened release body (the BREAKING entries, the headings and a
+#          link to CHANGELOG.md) instead of refusing, so the cap no longer blocks a release. It
+#          failed until the same 2026-11-26 ruling.
+#      When both fire it prints both notices and exits 0. Within both it prints the drift and exits
+#      0. That number being visible every week is the point; being red every week would not be.
 #
 # WHAT COUNTS AS CONSUMER-VISIBLE — a check that fires when nothing can ship is a check reviewers
 # learn to ignore, so the filtering is deliberate:
@@ -70,8 +78,12 @@
 # VERSION-INVARIANT BY CONSTRUCTION: no version literal appears below; the tag is derived from
 # Directory.Build.props at run time, so no future release edits this file.
 #
-# Exit 0 = nothing blocks a release (drift, and the "cut a release?" notice, may still be printed).
-# Exit 1 = a release is owed: state A, or the [Unreleased] section past 90% of the cap. Exit 2 = cannot tell.
+# Exit 0 = the state was read; whatever it found is reported as notices and the report, never as a
+#          failure (no state above exits non-zero).
+# Exit 2 = cannot tell (no <PackageVersion> to derive the tag from) — the run goes red, because an
+#          unreadable state is not a fine one.
+# No path exits 1 on purpose. A command that fails unexpectedly still ends the run under `set -e`
+# with its own status, which may be 1: that is a broken check, not a finding.
 set -euo pipefail
 
 STALE_DAYS="${STALE_DAYS:-14}"
@@ -147,30 +159,53 @@ if [ -z "$version" ]; then
 fi
 tag="v$version"
 
+# State A is a green notice, so a checkout that cannot see tags must not read as "staged": a failed
+# tag fetch, a shallow clone or no repository at all would otherwise pass silently. Cannot tell.
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "publish-liveness: not inside a git repository — cannot tell" >&2
+  exit 2
+fi
+if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+  echo "publish-liveness: shallow clone — tags and history are incomplete, cannot tell (checkout needs fetch-depth: 0)" >&2
+  exit 2
+fi
+if [ -z "$(git tag -l 'v*')" ]; then
+  echo "publish-liveness: no v* tags in this checkout — the tag fetch likely failed, cannot tell" >&2
+  exit 2
+fi
+
 # ---------------------------------------------------------------------------------------------
 # State A — the version is staged and its tag was never pushed.
 # ---------------------------------------------------------------------------------------------
 if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null 2>&1; then
-  echo "publish-liveness: FAILED — version $version is staged but never tagged."
-  echo
-  echo "  <PackageVersion> names $version and the tag $tag does not exist, so publish.yml has never"
-  echo "  run for it. That workflow triggers on 'push: tags: v*' and nothing else, which is why this"
-  echo "  state produces no failing run anywhere — only silence. This check is that missing signal."
-  echo
-
   bump="$(git log --format='%H' -S"<PackageVersion>$version</PackageVersion>" \
             -- Directory.Build.props | tail -1 || true)"
   if [ -n "$bump" ]; then
     n="$(git rev-list --count "$bump..HEAD" 2>/dev/null || echo '?')"
     when="$(git log -1 --format='%ad' --date=short "$bump" 2>/dev/null || echo '?')"
-    echo "  Staged since $when ($(git rev-parse --short "$bump")), $n commit(s) ago."
+    short="$(git rev-parse --short "$bump")"
+    echo "::notice title=Release staged::$version is staged since $when ($short), $n commit(s) ago, and $tag does not exist yet — push the tag when the release is ready."
+  else
+    echo "::notice title=Release staged::$version is staged and $tag does not exist yet — push the tag when the release is ready."
+  fi
+
+  echo "publish-liveness: version $version is staged but never tagged."
+  echo
+  echo "  <PackageVersion> names $version and the tag $tag does not exist, so publish.yml has never"
+  echo "  run for it. That workflow triggers on 'push: tags: v*' and nothing else, which is why this"
+  echo "  state produces no run anywhere — only silence. This notice is that missing signal. It is"
+  echo "  expected between the release PR's merge and the tag push, however long that takes."
+  echo
+  if [ -n "$bump" ]; then
+    echo "  Staged since $when ($short), $n commit(s) ago."
     echo
   fi
 
   echo "  Fix: push the tag — 'git tag $tag <sha-on-main> && git push origin $tag'. Annotated or"
   echo "  lightweight both work: publish.yml's provenance gate peels \$GITHUB_SHA to a commit before"
   echo "  it asks the check-runs API, which cannot resolve a tag object. See ADR-0055."
-  exit 1
+  echo "  (Drift since the previous release is not reported until this tag exists: it is measured from it.)"
+  exit 0
 fi
 
 # ---------------------------------------------------------------------------------------------
@@ -210,15 +245,16 @@ if [ "$unreleased_bytes" -gt "$BODY_WARN" ]; then
   size_due=1
 fi
 
-# The time half is a question, never a failure: one annotation line, printed whatever else happens.
-ask_to_cut() {
-  if [ "$time_due" -eq 1 ]; then
-    echo "::notice title=Release cadence::${#changed[@]} consumer-visible path(s) waiting $age_days days since $tag — cut a release?"
-  fi
-}
+# Both halves are notices, never failures: one annotation line each, at the start of a line, where
+# GitHub reads a workflow command. `%` is left literal: the runner only decodes %25, %0D and %0A.
+if [ "$time_due" -eq 1 ]; then
+  echo "::notice title=Release cadence::${#changed[@]} consumer-visible path(s) waiting $age_days days since $tag — cut a release?"
+fi
+if [ "$size_due" -eq 1 ]; then
+  echo "::notice title=Release notes size::[Unreleased] is $unreleased_bytes bytes, $(( unreleased_bytes * 100 / BODY_LIMIT ))% of GitHub's $BODY_LIMIT-character release-body cap — past the cap the release page gets a shortened body with a link to CHANGELOG.md; condense the section or cut a release."
+fi
 
 if [ "$size_due" -eq 0 ]; then
-  ask_to_cut
   echo "publish-liveness: $tag is published; ${#changed[@]} consumer-visible path(s) have moved since."
   if [ "${#changed[@]}" -gt 0 ]; then
     printf '    %s\n' "${changed[@]:0:10}"
@@ -235,24 +271,29 @@ if [ "$size_due" -eq 0 ]; then
   exit 0
 fi
 
-ask_to_cut
-echo "publish-liveness: FAILED — the [Unreleased] section is near the release-body cap; cut a release before it blocks one."
+echo "publish-liveness: $tag is published; the [Unreleased] section is near the release-body cap."
 echo
 echo "  * the [Unreleased] CHANGELOG section is $unreleased_bytes bytes — past 90% of the ${BODY_LIMIT}-character release-body cap"
 if [ "$time_due" -eq 1 ]; then
-  echo "  * (not a failure on its own) unreleased shipped content is $age_days days old (notice after $STALE_DAYS)"
+  echo "  * unreleased shipped content is $age_days days old (notice after $STALE_DAYS)"
 fi
+echo
+echo "  Not a failure: past the cap publish.yml publishes a shortened release body (the BREAKING"
+echo "  entries, the headings and a link to CHANGELOG.md) instead of the whole section. Under the cap"
+echo "  the release page carries the section in full."
 echo
 echo "  <PackageVersion> still names $version, whose tag $tag already exists. publish.yml only runs"
 echo "  on a tag push and this version's tag has been used, so nothing below can reach a consumer"
 echo "  until the version moves."
+if [ "${#changed[@]}" -gt 0 ]; then
+  echo
+  echo "  Changed since $tag:"
+  echo
+  printf '    %s\n' "${changed[@]:0:30}"
+fi
 echo
-echo "  Changed since $tag:"
-echo
-printf '    %s\n' "${changed[@]:0:30}"
-echo
-echo "  Fix: bump <PackageVersion> in Directory.Build.props and rename '## [Unreleased]' to the new"
-echo "  version in CHANGELOG.md — publish.yml refuses to release without that section, and hard-fails"
-echo "  pre-push if it exceeds $BODY_LIMIT characters. The bump moves this repo into the 'staged,"
-echo "  never cut' state, which this same check reports until the tag is pushed."
-exit 1
+echo "  Fix: condense the [Unreleased] section, or cut a release — bump <PackageVersion> in"
+echo "  Directory.Build.props and rename '## [Unreleased]' to the new version in CHANGELOG.md"
+echo "  (publish.yml refuses to release without that section). The bump moves this repo into the"
+echo "  'staged, never cut' state, which this same check reports until the tag is pushed."
+exit 0

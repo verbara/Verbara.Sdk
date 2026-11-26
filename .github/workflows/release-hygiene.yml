@@ -10,20 +10,27 @@ name: Release Hygiene
 #
 # So this workflow runs where nothing else does — after the merge, on `main` — and its failure
 # mode is a notification, not a block. It cannot be a required check: gating PRs on "a release
-# is owed" would stop unrelated work to punish a maintenance task. It speaks in two ways. A
-# release that is owed (a version staged but never tagged, or an [Unreleased] section near the
-# release-body cap) fails the run, and GitHub emails the actor when a workflow fails on a
-# default-branch push. Shipped content that has only been waiting a while is a question, not a
-# failure: the run stays green and carries a "Release cadence" notice on its summary page, and
-# no email is sent. When to cut is the maintainer's call; a date is an estimate, not a deadline.
+# is owed" would stop unrelated work to punish a maintenance task. The two jobs speak
+# differently. Publish Liveness only reports, through notices on the run's summary page: a
+# version staged but never tagged ("Release staged"), shipped content waiting a while ("Release
+# cadence"), an [Unreleased] section near the release-body cap ("Release notes size"). It stays
+# green for all three and goes red only when it cannot tell (exit 2). When to cut is the
+# maintainer's call; a date is an estimate, not a deadline, and past the cap publish.yml publishes
+# a shortened body instead of refusing. ApiCompat Baseline still FAILS when the package-validation
+# baseline is behind the newest stable tag or missing from nuget.org, and GitHub emails the actor
+# when a workflow fails on a default-branch push.
 #
 # The weekly schedule covers the case a push trigger structurally cannot: a staged release on a
-# repo that has gone quiet. That is the state 2.5.0 was actually in near the end.
+# repo that has gone quiet, the state 2.5.0 was in near the end. Since 2026-11-26 that run carries a
+# "Release staged" notice instead of failing, so it reaches whoever opens the run, not an inbox —
+# the accepted cost of deciding release timing by hand. It still fails for a stale ApiCompat baseline.
 #
 # publish.yml's provenance gate IGNORES this workflow's check runs, matched by this file's exact
-# path (scripts/ci/check-release-provenance.sh, ADR-0055 addendum 2026-09-12): on a release commit
-# they are red by design, before the tag or after it. Only add a job here if the same is true of
-# it — a build or test job in this file would stop counting towards a release. Renaming or moving
+# path (scripts/ci/check-release-provenance.sh, ADR-0055 addendum 2026-09-12): they judge the
+# repository against its tags, not whether the commit was built. ApiCompat Baseline is red by design
+# on a release commit once the tag exists; Publish Liveness was red before the tag until it moved to
+# notices, and older release commits still carry those red runs. Only add a job here if the same is
+# true of it — a build or test job in this file would stop counting towards a release. Renaming or moving
 # this file ends the exclusion; scripts/tests/test_release_provenance.sh fails on the PR that does.
 on:
   push:
@@ -77,8 +84,8 @@ jobs:
       - name: Make sure tags are present
         run: git fetch --tags --force --quiet
 
-      # Deliberately a separate job from the one above. They fail for unrelated reasons and are
-      # fixed by different edits; folding them into one job would make either failure hide the
-      # other, and there is no ordering between them.
+      # Deliberately a separate job from the one above. They report unrelated things and are
+      # fixed by different edits; folding them into one job would let one job's failure (this one's,
+      # or the other's "cannot tell") hide the other's result, and there is no ordering between them.
       - name: Is the package-validation baseline current?
         run: scripts/ci/check-apicompat-baseline.sh
