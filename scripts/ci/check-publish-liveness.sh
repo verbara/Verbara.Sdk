@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-publish-liveness.sh — answers ONE question: is a release overdue?
+# check-publish-liveness.sh — is a release owed (a failure), or only worth asking about (a notice)?
 #
 # WHY THIS EXISTS. `publish.yml` triggers on `push: tags: v*` and nothing else; `ci.yml` runs on
 # `pull_request` + `merge_group` and deliberately drops the post-merge push run. Between them is a
@@ -22,7 +22,8 @@
 # monthly, so unreleased content is the NORMAL state — a check that fails on its mere existence
 # would be red most of every month, and a signal that is red most of the time protects nothing.
 # What is abnormal is unreleased content that has been waiting too long, or a CHANGELOG section
-# heading for the cap. Those are what this fails on. See ADR-0055.
+# heading for the cap. Those are what this reports on: the cap as a failure, the waiting as a
+# question. See ADR-0055.
 #
 # THE STATES
 #
@@ -32,13 +33,18 @@
 #      annoyance; the silent version of this state cost three days.
 #
 #   B. SHIPPED, THEN DRIFTED — the tag exists and consumer-visible content has landed on top of it.
-#      Reported always, failed only past a budget:
-#        * the oldest unreleased consumer-visible commit is more than STALE_DAYS old (default 14 —
-#          half the cycle above, while the trend is still correctable), or
-#        * the `[Unreleased]` CHANGELOG section is past 90% of the release-body cap, the same
+#      Reported always, with two triggers that are deliberately NOT the same kind of signal:
+#        * TIME — the oldest unreleased consumer-visible commit is more than STALE_DAYS old (default
+#          14 — half the cycle above, while the trend is still correctable). This ASKS, it does not
+#          fail: a GitHub Actions notice annotation, "cut a release?", plus the drift report, and
+#          exit 0. The owner decides when to cut; STALE_DAYS only sets when the question appears.
+#          It failed until the owner ruled on 2026-11-26 that a date is an estimate, not a deadline.
+#        * SIZE — the `[Unreleased]` CHANGELOG section is past 90% of the release-body cap, the same
 #          threshold publish.yml warns at, so the two agree rather than one surprising the other.
-#      Within budget it prints the drift and exits 0. That number being visible every week is the
-#      point; being red every week would not be.
+#          This FAILS: past the cap GitHub refuses the release body, so it blocks the release itself.
+#      When both fire it fails for the size and still prints the time question. Within both it
+#      prints the drift and exits 0. That number being visible every week is the point; being red
+#      every week would not be.
 #
 # WHAT COUNTS AS CONSUMER-VISIBLE — a check that fires when nothing can ship is a check reviewers
 # learn to ignore, so the filtering is deliberate:
@@ -64,7 +70,8 @@
 # VERSION-INVARIANT BY CONSTRUCTION: no version literal appears below; the tag is derived from
 # Directory.Build.props at run time, so no future release edits this file.
 #
-# Exit 0 = nothing overdue (drift may still be reported). Exit 1 = a release is owed. Exit 2 = cannot tell.
+# Exit 0 = nothing blocks a release (drift, and the "cut a release?" notice, may still be printed).
+# Exit 1 = a release is owed: state A, or the [Unreleased] section past 90% of the cap. Exit 2 = cannot tell.
 set -euo pipefail
 
 STALE_DAYS="${STALE_DAYS:-14}"
@@ -188,32 +195,49 @@ if [ -n "$oldest" ]; then
   age_days=$(( (now_epoch - oldest_epoch) / 86400 ))
 fi
 
-overdue=0
-reasons=()
-if [ "$age_days" -gt "$STALE_DAYS" ]; then
-  overdue=1
-  reasons+=("unreleased shipped content is $age_days days old (budget: $STALE_DAYS)")
+time_due=0
+size_due=0
+# Only when something is actually waiting: a shipped change that was later reverted still starts
+# the clock, but leaves no path to release and so nothing to ask about.
+if [ "${#changed[@]}" -gt 0 ] && [ "$age_days" -gt "$STALE_DAYS" ]; then
+  time_due=1
 fi
 if [ "$unreleased_bytes" -gt "$BODY_WARN" ]; then
-  overdue=1
-  reasons+=("the [Unreleased] CHANGELOG section is $unreleased_bytes bytes — past 90% of the ${BODY_LIMIT}-character release-body cap")
+  size_due=1
 fi
 
-if [ "$overdue" -eq 0 ]; then
+# The time half is a question, never a failure: one annotation line, printed whatever else happens.
+ask_to_cut() {
+  if [ "$time_due" -eq 1 ]; then
+    echo "::notice title=Release cadence::${#changed[@]} consumer-visible path(s) waiting $age_days days since $tag — cut a release?"
+  fi
+}
+
+if [ "$size_due" -eq 0 ]; then
+  ask_to_cut
   echo "publish-liveness: $tag is published; ${#changed[@]} consumer-visible path(s) have moved since."
   if [ "${#changed[@]}" -gt 0 ]; then
     printf '    %s\n' "${changed[@]}" | head -10
     [ "${#changed[@]}" -gt 10 ] && echo "    … and $(( ${#changed[@]} - 10 )) more"
   fi
-  echo "  Oldest unreleased shipped change: $age_days day(s) (budget $STALE_DAYS)."
+  echo "  Oldest unreleased shipped change: $age_days day(s) (notice after $STALE_DAYS)."
   echo "  [Unreleased] CHANGELOG section: $unreleased_bytes bytes (cap $BODY_LIMIT, warn $BODY_WARN)."
-  echo "  Within budget — reported so the drift is visible, not because anything is wrong."
+  if [ "$time_due" -eq 1 ]; then
+    echo "  Waiting longer than $STALE_DAYS days — a question for the owner, not a failure. The date is"
+    echo "  an estimate, not a deadline; cut when the content is ready."
+  else
+    echo "  Within budget — reported so the drift is visible, not because anything is wrong."
+  fi
   exit 0
 fi
 
-echo "publish-liveness: FAILED — a release is overdue."
+ask_to_cut
+echo "publish-liveness: FAILED — the [Unreleased] section is near the release-body cap; cut a release before it blocks one."
 echo
-for r in "${reasons[@]}"; do echo "  * $r"; done
+echo "  * the [Unreleased] CHANGELOG section is $unreleased_bytes bytes — past 90% of the ${BODY_LIMIT}-character release-body cap"
+if [ "$time_due" -eq 1 ]; then
+  echo "  * (not a failure on its own) unreleased shipped content is $age_days days old (notice after $STALE_DAYS)"
+fi
 echo
 echo "  <PackageVersion> still names $version, whose tag $tag already exists. publish.yml only runs"
 echo "  on a tag push and this version's tag has been used, so nothing below can reach a consumer"

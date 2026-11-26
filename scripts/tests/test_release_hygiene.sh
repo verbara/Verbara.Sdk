@@ -101,6 +101,14 @@ says() { # says <needle> <description>
   case "$OUT" in *"$1"*) ok ;; *) bad "$2 — output did not mention '$1'";; esac
 }
 
+silent_on() { # silent_on <needle> <description> — the output must NOT contain the needle
+  case "$OUT" in *"$1"*) bad "$2 — output mentioned '$1'" ;; *) ok ;; esac
+}
+
+says_line() { # says_line <exact line> <description> — GitHub reads a workflow command only at the start of a line
+  if printf '%s\n' "$OUT" | command grep -qxF -- "$1"; then ok; else bad "$2 — no line exactly '$1'"; fi
+}
+
 # =============================================================================================
 # contract
 # =============================================================================================
@@ -148,19 +156,27 @@ commit_at '2026-01-02T12:00:00' "feat: ship something"
 run "$LIVENESS" 0 "fresh unreleased content is reported, not failed"
 says "Within budget" "fresh drift reports rather than fails"
 says "src/Foo/Foo.cs" "fresh drift names the shipped path"
+silent_on "::notice" "fresh drift within budget asks nothing"
 
 new_repo
 echo '// changed' >> "$WORK/src/Foo/Foo.cs"
 commit_at '2026-01-02T12:00:00' "feat: ship something"
 echo x > "$WORK/docs-note.txt"; g add -A
 commit_at '2026-02-01T12:00:00' "chore: much later"
-run "$LIVENESS" 1 "unreleased content past the 14-day budget fails"
-says "a release is overdue" "aged drift fails"
-says "30 days old" "aged drift reports the measured age"
+# Past the time budget is a QUESTION to the owner, not a failure: a date is an estimate, never a
+# deadline. Exit 0, with a notice annotation asking whether to cut.
+run "$LIVENESS" 0 "unreleased content past the 14-day budget asks, it does not fail"
+says_line "::notice title=Release cadence::1 consumer-visible path(s) waiting 30 days since v1.0.0 — cut a release?" "aged drift raises the notice on its own line, with the path count"
+says "cut a release?" "aged drift is phrased as a question"
+says "30 days" "aged drift reports the measured age"
+silent_on "FAILED" "aged drift alone is not a failure"
 
-# The budget is a judgement, so it must be adjustable — and adjustable in both directions.
-run "$LIVENESS" 0 "a widened budget makes the same tree pass" STALE_DAYS=60
-run "$LIVENESS" 1 "a narrowed budget fails a tree that passed at 14 days" STALE_DAYS=0
+# The budget is a judgement, so it stays adjustable — it now sets when the question is asked.
+run "$LIVENESS" 0 "a widened budget keeps the same tree quiet" STALE_DAYS=60
+silent_on "::notice" "a widened budget asks nothing"
+run "$LIVENESS" 0 "a narrowed budget still only asks" STALE_DAYS=0
+says "::notice title=Release cadence::" "a narrowed budget raises the notice"
+says "cut a release?" "a narrowed budget phrases it as a question"
 
 # The clock starts at the first SHIPPING commit, not the first commit in the range: an old
 # test-only bump must not age a young shipped change.
@@ -181,6 +197,33 @@ g add -A
 commit_at '2026-01-02T12:00:00' "docs: a very large changelog section"
 run "$LIVENESS" 1 "an [Unreleased] section past 90% of the cap fails on its own"
 says "release-body cap" "the cap failure names the cap"
+silent_on "::notice" "a cap failure with no aged content asks nothing"
+
+# Both halves at once: the size half still fails (it blocks the release itself), and the time
+# question is still printed alongside it.
+new_repo
+echo '// changed' >> "$WORK/src/Foo/Foo.cs"
+commit_at '2026-01-02T12:00:00' "feat: ship something"
+changelog 120000
+g add -A
+commit_at '2026-02-01T12:00:00' "docs: a very large changelog section, much later"
+run "$LIVENESS" 1 "past the cap AND past the time budget still fails"
+says "release-body cap" "the combined failure names the cap"
+says_line "::notice title=Release cadence::1 consumer-visible path(s) waiting 30 days since v1.0.0 — cut a release?" "the combined failure still asks the time question, on its own line"
+says "30 days" "the combined failure reports the measured age"
+
+# A shipped change that was later reverted leaves nothing to release, so there is nothing to ask
+# about — even when the size half fails and the reverted commit is old.
+new_repo
+echo '// changed' >> "$WORK/src/Foo/Foo.cs"
+commit_at '2026-01-02T12:00:00' "feat: ship something"
+g checkout -q HEAD~1 -- src/Foo/Foo.cs
+commit_at '2026-01-03T12:00:00' "revert: ship something"
+changelog 120000
+g add -A
+commit_at '2026-02-01T12:00:00' "docs: a very large changelog section, much later"
+run "$LIVENESS" 1 "a reverted change with a large section still fails for size"
+silent_on "::notice" "a reverted change leaves no path waiting, so nothing is asked"
 
 new_repo
 changelog 1000

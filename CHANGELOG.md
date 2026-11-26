@@ -872,6 +872,14 @@ internal hosted service. No public API changes.
 
 To roll back, revert the package. A pool host then saves under a token that cannot be cancelled again.
 
+### Changed: release hygiene asks about a release that has waited, and fails only near the release-body cap (#664)
+
+`scripts/ci/check-publish-liveness.sh` no longer fails when shipped content has waited past its budget (`STALE_DAYS`,
+still 14 days by default). The run stays green and carries a `Release cadence` notice: how many shipped paths are
+waiting, for how many days since the last tag, and whether to cut a release. A date is an estimate, not a deadline;
+when to cut is the maintainer's call. An `[Unreleased]` section past 90% of the release-body cap still fails, because
+past the cap GitHub refuses the release itself. A version staged but never tagged still fails too. No package changes.
+
 ## [2.10.1] - 2026-11-16
 
 ### Fixed: `CompositeAudioServer.OnStreamConnected` announces each stream as the server that accepted it does (#584)
