@@ -888,7 +888,7 @@ full notes in `CHANGELOG.md` at the tag, every BREAKING entry in full, and the h
 that does not fit, the page lists only the headings. A release whose notes fit gets the same description as before,
 byte for byte. The packages are unaffected.
 
-### Changed: release hygiene reports a staged release and a large changelog as notices (#NNN)
+### Changed: release hygiene reports a staged release and a large changelog as notices (#667)
 
 `scripts/ci/check-publish-liveness.sh` no longer fails when a version is staged in `Directory.Build.props` but its tag
 is not pushed yet, or when the `[Unreleased]` CHANGELOG section passes 90% of GitHub's release-body cap. Both print a
