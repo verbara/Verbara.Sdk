@@ -908,7 +908,7 @@ passes through states in orders it did not before.
   snapshot reports and the call did not have counts, and only an up one: a ringing leg changes nothing the SDK
   watched. Two consequences follow. A call that starts while the snapshot is being read can be found connected by it,
   and then raises no `CallConnectedEvent` and has no `ConnectedAt` for that connection. A call the dialplan answered
-  with no dial (the exception below) that a reload finds with a new up leg is connected from then on, and ends
+  with no dial (the exception above) that a reload finds with a new up leg is connected from then on, and ends
   `Completed` with a `null` `ConnectedAt` rather than the answer's time.
 
 **Who is affected.** Code that subscribes to `ICallSessionManager.Events` and treats each `CallConnectedEvent` as a new
