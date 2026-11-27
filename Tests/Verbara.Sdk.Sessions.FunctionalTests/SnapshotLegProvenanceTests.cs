@@ -232,9 +232,10 @@ public sealed class SnapshotLegProvenanceTests
     {
         const int calls = 16;
         var byOpener = new List<(bool MemberOpened, CallSessionState Admitted, CallSessionState End)>();
+        var entries = new StringBuilder();
         for (var set = 0; set < 32 && !byOpener.Any(x => x.MemberOpened); set++)
         {
-            var entries = new StringBuilder();
+            entries.Clear();
             for (var i = 0; i < calls; i++)
             {
                 entries.Append(StatusEntry(MemberId(i, set), MemberCh(i), 0, CallerId(i, set)));
