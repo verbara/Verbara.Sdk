@@ -216,4 +216,100 @@ public sealed class SnapshotLegProvenanceTests
             await server.DisposeAsync();
         }
     }
+
+    private static string CallerId(int i, int set) => $"c{set}.{i}";
+    private static string MemberId(int i, int set) => $"m{set}.{i}";
+    private static string CallerCh(int i) => $"PJSIP/loop-{i:x8}";
+    private static string MemberCh(int i) => $"PJSIP/agent2-{i + 0x100:x8}";
+
+    /// <summary>
+    /// Both legs come from the start-up snapshot, the caller ringing and the member down, and the caller is answered
+    /// live before the manager attaches, so no session sees that answer. When the admission walks the table the call is
+    /// up: every call is admitted connected and ends completed, whichever leg the walk visits first.
+    /// </summary>
+    [Fact]
+    public async Task AdmitExistingCalls_ShouldConnectEveryCall_WhenItsCallerWasAnsweredAfterTheSnapshotBeforeTheAttach()
+    {
+        const int calls = 16;
+        var byOpener = new List<(bool MemberOpened, CallSessionState Admitted, CallSessionState End)>();
+        for (var set = 0; set < 32 && !byOpener.Any(x => x.MemberOpened); set++)
+        {
+            var entries = new StringBuilder();
+            for (var i = 0; i < calls; i++)
+            {
+                entries.Append(StatusEntry(MemberId(i, set), MemberCh(i), 0, CallerId(i, set)));
+                entries.Append(StatusEntry(CallerId(i, set), CallerCh(i), 4, CallerId(i, set)));
+            }
+            var connection = new ReloadableConnection(await F(StatusReply(entries.ToString())));
+            var server = new VerbaraServer(connection.Connection, NullLogger<VerbaraServer>.Instance);
+            var manager = new CallSessionManager(Options.Create(new SessionOptions()),
+                NullLogger<CallSessionManager>.Instance, new InMemorySessionStore());
+            try
+            {
+                await server.StartAsync();
+                for (var i = 0; i < calls; i++)
+                    foreach (var f in await F(NewState(CallerId(i, set), CallerCh(i), 6, CallerId(i, set))))
+                        connection.Observer.OnNext(f);
+                server.Channels.GetByUniqueId(CallerId(0, set))!.State.Should().Be(ChannelState.Up, "premise");
+                manager.AttachToServer(server, ServerId);
+                await manager.AdmitExistingCalls(ServerId);
+                var sessions = Enumerable.Range(0, calls).Select(i => manager.GetByChannelId(CallerId(i, set))!).ToList();
+                var admitted = sessions.Select(s => s.State).ToList();
+                for (var i = 0; i < calls; i++)
+                    foreach (var f in await F(Hangup(MemberId(i, set), MemberCh(i), CallerId(i, set), 0)
+                        + Hangup(CallerId(i, set), CallerCh(i), CallerId(i, set), 16)))
+                        connection.Observer.OnNext(f);
+                for (var i = 0; i < calls; i++)
+                    byOpener.Add((sessions[i].Participants[0].UniqueId.StartsWith('m'), admitted[i], sessions[i].State));
+            }
+            finally
+            {
+                await manager.DisposeAsync();
+                await server.DisposeAsync();
+            }
+        }
+
+        using var scope = new AssertionScope();
+        byOpener.Should().Contain(x => x.MemberOpened, "premise: some call was opened from its member leg");
+        byOpener.Select(x => x.Admitted).Should().OnlyContain(s => s == CallSessionState.Connected,
+            "the caller is up when the walk reads the table");
+        byOpener.Select(x => x.End).Should().OnlyContain(s => s == CallSessionState.Completed);
+    }
+
+    /// <summary>
+    /// The caller's leg comes from the start-up snapshot ringing and is answered before the attach; the member's leg
+    /// opens the call live after it, and the admission walk joins the caller's leg: the call is admitted connected and
+    /// ends completed.
+    /// </summary>
+    [Fact]
+    public async Task AdmitExistingCalls_ShouldEndCompleted_WhenTheMemberOpensLiveAndTheCallerWasAnsweredAfterTheSnapshot()
+    {
+        const string c = "1795769507.49", cch = "PJSIP/loop-00000031", m = "1795769510.52", mch = "PJSIP/agent2-00000034";
+        var connection = new ReloadableConnection(await F(StatusReply(StatusEntry(c, cch, 4, c))));
+        var server = new VerbaraServer(connection.Connection, NullLogger<VerbaraServer>.Instance);
+        var manager = new CallSessionManager(Options.Create(new SessionOptions()), NullLogger<CallSessionManager>.Instance,
+            new InMemorySessionStore());
+        try
+        {
+            await server.StartAsync();
+            foreach (var f in await F(NewState(c, cch, 6, c))) connection.Observer.OnNext(f);
+            manager.AttachToServer(server, ServerId);
+            foreach (var f in await F(NewChannel(m, mch, 0, c))) connection.Observer.OnNext(f);
+            await manager.AdmitExistingCalls(ServerId);
+            var session = manager.GetByChannelId(c)!;
+            var admitted = session.State;
+            var opener = session.Participants[0].UniqueId;
+            foreach (var f in await F(Hangup(m, mch, c, 0) + Hangup(c, cch, c, 16))) connection.Observer.OnNext(f);
+
+            using var scope = new AssertionScope();
+            opener.Should().Be(m, "premise");
+            admitted.Should().Be(CallSessionState.Connected, "the caller is up when the walk reads the table");
+            session.State.Should().Be(CallSessionState.Completed);
+        }
+        finally
+        {
+            await manager.DisposeAsync();
+            await server.DisposeAsync();
+        }
+    }
 }
