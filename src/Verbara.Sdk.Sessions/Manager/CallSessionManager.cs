@@ -825,11 +825,11 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
     }
 
     /// <summary>
-    /// Raises a call a snapshot opened to the state the snapshot reported for <paramref name="channel"/>, a leg of it
-    /// the same snapshot listed after the one that opened it, when that state is further along
-    /// (<see cref="CallSession.TryRaiseToReportedState"/>), and records where the state came from in the audit
-    /// trail, as the opening does. Nothing is published and no time is stamped: the state was reported, not observed.
-    /// Called under the call's lock.
+    /// Raises <paramref name="call"/> to the state a snapshot reported for <paramref name="channel"/>, a leg that
+    /// joins it from that snapshot as a new participant, when that state is further along and the call is still
+    /// created or ringing (<see cref="CallSession.TryRaiseToReportedState"/>), however the call was opened. Records
+    /// where the state came from in the audit trail, as the opening does. Nothing is published and no time is
+    /// stamped: the state was reported, not observed. Called under the call's lock, only after the leg was added.
     /// </summary>
     private static void RaiseToReportedState(CallSession call, AsteriskChannel channel, CallSessionState? reported)
     {

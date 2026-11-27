@@ -153,7 +153,11 @@ public sealed partial class CallSessionManager
                         if (FindPresentParticipant(target, channel.UniqueId) is null)
                         {
                             AddAdmissionParticipant(target, channel);
-                            RaiseToReportedState(target, channel, ReportedSessionState(channel.State));
+                            // Only a leg a snapshot reported raises the call: a leg that arrived live after the attach
+                            // is the manager's to watch, like any live join. It raises from the table's state, as the
+                            // opening does, since a change the leg had before the attach reached no session.
+                            if (channel.AdmittedFromSnapshot)
+                                RaiseToReportedState(target, channel, ReportedSessionState(channel.State));
                             changed = true;
                         }
                     }

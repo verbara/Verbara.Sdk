@@ -903,6 +903,13 @@ passes through states in orders it did not before.
   that instant as its `Timestamp`, and a later connection never moves it. Every `CallConnectedEvent` finds the call
   `Connected` with `ConnectedAt` set. A call in `Connected` with a `null` `ConnectedAt` is one a reload or an admission
   found connected, since an unknown time; its first connection of its own sets it.
+- A reload or an admission finds a call connected when any leg the snapshot reports for it is up, whichever order
+  Asterisk lists the legs in and whichever leg opened the call. For a call the SDK watched open, only a leg the
+  snapshot reports and the call did not have counts, and only an up one: a ringing leg changes nothing the SDK
+  watched. Two consequences follow. A call that starts while the snapshot is being read can be found connected by it,
+  and then raises no `CallConnectedEvent` and has no `ConnectedAt` for that connection. A call the dialplan answered
+  with no dial (the exception above) that a reload finds with a new up leg is connected from then on, and ends
+  `Completed` with a `null` `ConnectedAt` rather than the answer's time.
 
 **Who is affected.** Code that subscribes to `ICallSessionManager.Events` and treats each `CallConnectedEvent` as a new
 answered call: an "answered" counter, the start of an assistance or recording step, or the reservation of an agent's
