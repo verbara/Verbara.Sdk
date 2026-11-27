@@ -128,19 +128,41 @@ public sealed class ReloadedCallOpeningStateTests
     }
 
     /// <summary>
-    /// The first-attach admission walks the channel table in its own order, which a test cannot choose. Many calls
-    /// are admitted at once, so the walk visits a member leg before its caller in some of them; every call must end
-    /// completed whichever leg opened it.
+    /// The first-attach admission walks the channel table in its own order, which a test cannot choose: it follows the
+    /// table's buckets, and their number depends on the processor count, so one set of channel ids can be visited
+    /// caller first on one machine and member first on another. The test therefore admits several sets, each with its
+    /// own ids and its own manager, until one set has a call the walk opened from its member leg; every call of every
+    /// set must end completed whichever leg opened it.
     /// </summary>
     [Fact]
     public async Task AdmitExistingCalls_ShouldEndEveryAnsweredCallCompleted_WhenTheWalkVisitsAMemberLegBeforeItsCaller()
     {
         const int calls = 16;
+        const int maxSets = 32;
+        var openedByMember = 0;
+        var admitted = new List<CallSession>();
+        for (var set = 0; set < maxSets && openedByMember == 0; set++)
+        {
+            var sessions = await AdmitAndHangUpAsync(set, calls);
+            admitted.AddRange(sessions);
+            openedByMember += sessions.Count(s => s.Participants[0].UniqueId.StartsWith('m'));
+        }
+
+        using var scope = new AssertionScope();
+        openedByMember.Should().BePositive(
+            $"premise: in at least one of {maxSets} sets the walk visited a member leg first");
+        admitted.Should().OnlyContain(s => s.HasBeenConnected, "every caller is up when the admission reads the table");
+        admitted.Select(s => s.State).Should().OnlyContain(s => s == CallSessionState.Completed,
+            "every caller was answered and hung up with Cause 16");
+    }
+
+    private static async Task<List<CallSession>> AdmitAndHangUpAsync(int set, int calls)
+    {
         var entries = new StringBuilder();
         for (var i = 0; i < calls; i++)
         {
-            entries.Append(MemberStatus(i % 2 == 0 ? 0 : 5, MemberId(i), MemberChannelOf(i), CallerId(i)));
-            entries.Append(CallerStatusOf(CallerId(i), CallerChannelOf(i)));
+            entries.Append(MemberStatus(i % 2 == 0 ? 0 : 5, MemberId(i, set), MemberChannelOf(i), CallerId(i, set)));
+            entries.Append(CallerStatusOf(CallerId(i, set), CallerChannelOf(i)));
         }
         var connection = new ReloadableConnection(await FramesAsync(StatusReply(entries.ToString())));
         var server = new VerbaraServer(connection.Connection, NullLogger<VerbaraServer>.Instance);
@@ -153,22 +175,15 @@ public sealed class ReloadedCallOpeningStateTests
             await manager.AdmitExistingCalls(ServerId);
 
             var sessions = Enumerable.Range(0, calls)
-                .Select(i => manager.GetByChannelId(CallerId(i))
-                    ?? throw new InvalidOperationException($"premise: the admission admits call {i}"))
+                .Select(i => manager.GetByChannelId(CallerId(i, set))
+                    ?? throw new InvalidOperationException($"premise: the admission admits call {i} of set {set}"))
                 .ToList();
-            var openedByMember = sessions.Count(s => s.Participants[0].UniqueId.StartsWith("m.", StringComparison.Ordinal));
 
             for (var i = 0; i < calls; i++)
-                foreach (var frame in await FramesAsync(Hangup(MemberId(i), MemberChannelOf(i), CallerId(i), 0)
-                    + Hangup(CallerId(i), CallerChannelOf(i), CallerId(i), 16)))
+                foreach (var frame in await FramesAsync(Hangup(MemberId(i, set), MemberChannelOf(i), CallerId(i, set), 0)
+                    + Hangup(CallerId(i, set), CallerChannelOf(i), CallerId(i, set), 16)))
                     connection.Observer.OnNext(frame);
-
-            using var scope = new AssertionScope();
-            openedByMember.Should().BePositive("premise: the walk visited a member leg first in at least one call");
-            sessions.Should().OnlyContain(s => s.HasBeenConnected,
-                "every caller is up when the admission reads the table");
-            sessions.Select(s => s.State).Should().OnlyContain(s => s == CallSessionState.Completed,
-                "every caller was answered and hung up with Cause 16");
+            return sessions;
         }
         finally
         {
@@ -177,8 +192,8 @@ public sealed class ReloadedCallOpeningStateTests
         }
     }
 
-    private static string CallerId(int i) => $"c.{i}";
-    private static string MemberId(int i) => $"m.{i}";
+    private static string CallerId(int i, int set) => $"c{set}.{i}";
+    private static string MemberId(int i, int set) => $"m{set}.{i}";
     private static string CallerChannelOf(int i) => $"PJSIP/loop-{i:x8}";
     private static string MemberChannelOf(int i) => $"PJSIP/agent2-{i + 0x100:x8}";
 
