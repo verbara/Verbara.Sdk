@@ -147,6 +147,15 @@ should read the [2.11.0 migration guide](docs/guides/migration-2.11.0.md#what-a-
   `CallResumedEvent`. The held channel's own unhold ends the hold time even after the call left `OnHold` (a held call
   that is transferred); another channel's unhold does not.
 
+### Fixed: a call answered before a reconnect reload ends `Completed` whichever order Asterisk lists its legs (#673)
+
+A call answered before a reconnect reload, or before the manager's first attach, and waiting in a queue could end
+`Failed` with `NormalClearing` when the caller hung up normally. The `Status` snapshot opens the call from the first leg
+it lists, and when a queue member's new or ringing leg came before the caller's answered leg, the call opened as never
+connected and stayed so. Now a later leg of the same snapshot raises the call to that leg's reported state when it is
+further along, so the order no longer matters. The raise raises no `CallConnectedEvent` and stamps no `ConnectedAt`, as
+the opening itself does not; a call the manager watched, or one an observed event already moved on, keeps its state.
+
 ### Added: `CallConnectedEvent.AgentInterface` names the member whose connection the event announces (#615)
 
 `CallConnectedEvent` gains `string? AgentInterface { get; init; }`: the interface of the member whose connect the event

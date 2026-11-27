@@ -555,6 +555,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             // Positive evidence, read the way the ending's "cause" marker is — never inferred from
             // a null ConnectedAt.
             session.SetMetadata(OriginKey, OriginReload);
+            session.OpenedFromSnapshot = true;
         }
 
         if (reportedState is { } live)
@@ -815,10 +816,29 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             });
             call.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
                 CallSessionEventType.ParticipantJoined, channel.Name, null, role.ToString()));
+            if (channel.AdmittedFromSnapshot)
+                RaiseToReportedState(call, channel, ReportedSessionState(channel.AdmittedState));
         }
 
         _ = PersistAsync(call);
         return JoinResult.Joined;
+    }
+
+    /// <summary>
+    /// Raises a call a snapshot opened to the state the snapshot reported for <paramref name="channel"/>, a leg of it
+    /// the same snapshot listed after the one that opened it, when that state is further along
+    /// (<see cref="CallSession.TryRaiseToReportedState"/>), and records where the state came from in the audit
+    /// trail, as the opening does. Nothing is published and no time is stamped: the state was reported, not observed.
+    /// Called under the call's lock.
+    /// </summary>
+    private static void RaiseToReportedState(CallSession call, AsteriskChannel channel, CallSessionState? reported)
+    {
+        if (reported is not { } state || !call.TryRaiseToReportedState(state))
+            return;
+
+        call.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow,
+            state is CallSessionState.Connected ? CallSessionEventType.Connected : CallSessionEventType.Ringing,
+            channel.Name, null, OriginReload));
     }
 
     [LoggerMessage(EventId = 19, EventName = nameof(LogStaleJoinRefused), Level = LogLevel.Debug,
