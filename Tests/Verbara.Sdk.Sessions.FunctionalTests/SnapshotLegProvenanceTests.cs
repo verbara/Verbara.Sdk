@@ -144,7 +144,7 @@ public sealed class SnapshotLegProvenanceTests
                 manager.AdmitExistingCalls(ServerId).AsTask().Wait(TimeSpan.FromSeconds(10))
                     .Should().BeTrue("premise: the admission walk ends");
             }
-            catch (Exception ex) { walkError = ex; }
+            catch (Exception ex) when (ex is not OutOfMemoryException) { walkError = ex; }
         }
         try
         {
