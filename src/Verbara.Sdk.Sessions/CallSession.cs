@@ -676,6 +676,53 @@ public sealed class CallSession
     }
 
     /// <summary>
+    /// Whether this session was opened from a channel a <c>Status</c> snapshot reported — a first load, a
+    /// post-reconnect reload or a first-attach admission — rather than from an arrival the manager watched. Only
+    /// such a session is raised by <see cref="TryRaiseToReportedState"/>. Set once, before the session is
+    /// published; not persisted.
+    /// </summary>
+    internal bool OpenedFromSnapshot { get; set; }
+
+    /// <summary>
+    /// Raises a session a snapshot opened to the state Asterisk reported for another of its legs, when that state is
+    /// further along (<see cref="CallSessionState.Created"/> &lt; <see cref="CallSessionState.Ringing"/> &lt;
+    /// <see cref="CallSessionState.Connected"/>). Returns <c>true</c> if it did; otherwise it changes nothing.
+    /// <para>
+    /// A snapshot lists a call's legs in Asterisk's own order, and the first one listed opens the session
+    /// (<see cref="OpenInReportedState"/>). Without this, a queue member's new or ringing leg listed before the
+    /// caller's up leg would leave a call that was answered before the snapshot described as never answered, and
+    /// its ending would differ from the same call listed the other way round. The state a snapshot reports for a
+    /// call is the furthest state of any of its legs, whichever order they are listed in.
+    /// </para>
+    /// <para>
+    /// Like <see cref="OpenInReportedState"/> this is not a transition: it neither stamps <see cref="ConnectedAt"/>
+    /// or <see cref="RingingAt"/> nor publishes anything, because nothing was observed. It acts only on a session
+    /// <see cref="OpenedFromSnapshot"/> that is still <see cref="CallSessionState.Created"/> or
+    /// <see cref="CallSessionState.Ringing"/>, so a call the manager watched, or one an observed event has already
+    /// moved on, keeps its state. Called under <see cref="SyncRoot"/>.
+    /// </para>
+    /// </summary>
+    internal bool TryRaiseToReportedState(CallSessionState reported)
+    {
+        if (!OpenedFromSnapshot || ReportedRank(reported) <= ReportedRank(State)
+            || State is not (CallSessionState.Created or CallSessionState.Ringing))
+            return false;
+
+        State = reported;
+        if (reported == CallSessionState.Connected)
+            MarkConnected();
+        return true;
+    }
+
+    private static int ReportedRank(CallSessionState state) => state switch
+    {
+        CallSessionState.Created => 0,
+        CallSessionState.Ringing => 1,
+        CallSessionState.Connected => 2,
+        _ => -1,
+    };
+
+    /// <summary>
     /// Records a ring observed while the session is still in its initial state
     /// (<see cref="CallSessionState.Created"/>), where the transition table does not let a ring move it.
     /// It records and never transitions: it stamps <see cref="RingingAt"/> and returns <c>true</c> only for

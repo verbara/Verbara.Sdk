@@ -153,6 +153,7 @@ public sealed partial class CallSessionManager
                         if (FindPresentParticipant(target, channel.UniqueId) is null)
                         {
                             AddAdmissionParticipant(target, channel);
+                            RaiseToReportedState(target, channel, ReportedSessionState(channel.State));
                             changed = true;
                         }
                     }
@@ -210,6 +211,7 @@ public sealed partial class CallSessionManager
             Extension = channel.Extension
         };
         call.SetMetadata(OriginKey, OriginReload);
+        call.OpenedFromSnapshot = true;
         call.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow, CallSessionEventType.Created, channel.Name, null, null));
         if (ReportedSessionState(channel.State) is { } state)
         {
