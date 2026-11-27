@@ -147,7 +147,7 @@ should read the [2.11.0 migration guide](docs/guides/migration-2.11.0.md#what-a-
   `CallResumedEvent`. The held channel's own unhold ends the hold time even after the call left `OnHold` (a held call
   that is transferred); another channel's unhold does not.
 
-### Fixed: a call answered before a reconnect reload ends `Completed` whichever order Asterisk lists its legs (#NNN)
+### Fixed: a call answered before a reconnect reload ends `Completed` whichever order Asterisk lists its legs (#673)
 
 A call answered before a reconnect reload, or before the manager's first attach, and waiting in a queue could end
 `Failed` with `NormalClearing` when the caller hung up normally. The `Status` snapshot opens the call from the first leg
