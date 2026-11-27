@@ -110,7 +110,7 @@ public sealed class ReloadedCallOpeningStateTests
     }
 
     [Fact]
-    public async Task Reload_ShouldLeaveTheCallsStateAlone_WhenItsLegJoinsACallThisManagerWatchedOpen()
+    public async Task Reload_ShouldRaiseTheCallToConnectedSilently_WhenTheCallersUpLegJoinsACallThisManagerWatchedOpen()
     {
         await using var rig = await Rig.StartAsync();
         rig.Deliver(await FramesAsync(MemberCreatedLive));
@@ -122,9 +122,140 @@ public sealed class ReloadedCallOpeningStateTests
 
         using var scope = new AssertionScope();
         rig.Manager.GetByChannelId(Caller).Should().BeSameAs(session, "premise: the caller's leg joins the watched call");
-        session.State.Should().Be(CallSessionState.Created, "a call this manager watched open keeps the state it watched");
+        session.State.Should().Be(CallSessionState.Connected,
+            "the snapshot reports the caller's leg up, however the call was opened");
+        session.HasBeenConnected.Should().BeTrue("the caller was answered before the reload");
+        session.ConnectedAt.Should().BeNull("a reload reports that the caller is up, never when it answered");
+        rig.Events.OfType<CallConnectedEvent>().Should().BeEmpty("no connection was observed");
+        session.Events.Where(e => e.Type == CallSessionEventType.Connected).Should().ContainSingle(
+                "the audit trail says once where the connected state came from")
+            .Which.Should().Match<CallSessionEvent>(e => e.Detail == "reload" && e.SourceChannel == CallerChannel);
+    }
+
+    [Fact]
+    public async Task End_ShouldBeCompleted_WhenTheMemberLegArrivesLiveWhileTheReloadReadsTheStatus()
+    {
+        await using var rig = await Rig.StartAsync();
+        var live = await FramesAsync(MemberCreatedLive);
+        await rig.Connection.ReloadAsync(await FramesAsync(StatusReply(StatusEntries(MemberStatus(0), CallerStatus))),
+            await FramesAsync(QueueStatusReply), new ReloadScript(WhileStatusIsAsked: () => rig.Deliver(live)));
+        var session = rig.Manager.GetByChannelId(Caller)
+            ?? throw new InvalidOperationException("premise: the reload opens the call");
+        var reloaded = session.State;
+        var connected = session.HasBeenConnected;
+        var opener = session.Participants[0].UniqueId;
+
+        rig.Deliver(await FramesAsync(Hangups));
+
+        using var scope = new AssertionScope();
+        opener.Should().Be(Member, "premise: the member's live leg opened the call");
+        reloaded.Should().Be(CallSessionState.Queued, "premise: the reload reports the call waiting in the queue");
+        connected.Should().BeTrue("the caller's leg is up in the snapshot");
+        session.State.Should().Be(CallSessionState.Completed,
+            "the caller, answered before the reload, hung up with Cause 16 while waiting in the queue");
+        session.HangupCause.Should().Be(HangupCause.NormalClearing);
+    }
+
+    [Fact]
+    public async Task AdmitExistingCalls_ShouldEndTheCallCompleted_WhenTheMemberLegArrivedLiveBeforeTheAdmission()
+    {
+        var connection = new ReloadableConnection(await FramesAsync(StatusReply(CallerStatus)));
+        var server = new VerbaraServer(connection.Connection, NullLogger<VerbaraServer>.Instance);
+        var manager = new CallSessionManager(Options.Create(new SessionOptions()), NullLogger<CallSessionManager>.Instance,
+            new InMemorySessionStore());
+        try
+        {
+            await server.StartAsync();
+            manager.AttachToServer(server, ServerId);
+            foreach (var frame in await FramesAsync(MemberCreatedLive))
+                connection.Observer.OnNext(frame);
+            await manager.AdmitExistingCalls(ServerId);
+            var session = manager.GetByChannelId(Caller)
+                ?? throw new InvalidOperationException("premise: the admission admits the caller's leg");
+            var opener = session.Participants[0].UniqueId;
+            var connected = session.HasBeenConnected;
+
+            foreach (var frame in await FramesAsync(Hangup(Member, MemberChannel, Caller, 0)
+                + Hangup(Caller, CallerChannel, Caller, 16)))
+                connection.Observer.OnNext(frame);
+
+            using var scope = new AssertionScope();
+            opener.Should().Be(Member, "premise: the member's live leg opened the call");
+            connected.Should().BeTrue("the caller is up when the admission reads the table");
+            session.State.Should().Be(CallSessionState.Completed, "the caller was answered and hung up with Cause 16");
+        }
+        finally
+        {
+            await manager.DisposeAsync();
+            await server.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    /// The dialplan's own answer connects the call to no one, so a call this manager watched answered that way and
+    /// queued is not connected; a reload that relists its leg up reports a leg the call already has, not a new one,
+    /// and changes nothing: the call still ends failed when the caller hangs up before any member answers.
+    /// </summary>
+    [Fact]
+    public async Task End_ShouldBeFailed_WhenAReloadRelistsUpTheLegOfAWatchedCallTheDialplanAnsweredAndQueued()
+    {
+        await using var rig = await Rig.StartAsync();
+        rig.Deliver(await FramesAsync(CallerAnsweredByTheDialplanAndQueuedLive));
+        var session = rig.Manager.GetByChannelId(Caller)
+            ?? throw new InvalidOperationException("premise: the live arrival opens the call");
+        var watched = (session.State, session.HasBeenConnected);
+
+        await rig.Connection.ReloadAsync(await FramesAsync(StatusReply(CallerStatus)), await FramesAsync(QueueStatusReply));
+        var reloaded = (session.State, session.HasBeenConnected);
+        var kept = rig.Manager.GetByChannelId(Caller);
+        rig.Deliver(await FramesAsync(CallerAbandons));
+
+        using var scope = new AssertionScope();
+        watched.Should().Be((CallSessionState.Queued, false), "premise: the dialplan answered and queued the call");
+        kept.Should().BeSameAs(session, "premise: the reload keeps the watched call");
+        reloaded.Should().Be((CallSessionState.Queued, false), "the reload relists a leg the call already has");
+        session.State.Should().Be(CallSessionState.Failed, "a call never connected and abandoned in the queue fails");
+        session.HangupCause.Should().Be(HangupCause.NormalClearing);
+        rig.Events.OfType<CallConnectedEvent>().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(5)]
+    [InlineData(6)]
+    public async Task Reload_ShouldLeaveAQueuedCallQueued_WhenANewLegJoinsItFromTheSnapshot(int memberState)
+    {
+        await using var rig = await Rig.StartAsync();
+        rig.Deliver(await FramesAsync(CallerAnsweredByTheDialplanAndQueuedLive));
+        var session = rig.Manager.GetByChannelId(Caller)
+            ?? throw new InvalidOperationException("premise: the live arrival opens the call");
+        session.State.Should().Be(CallSessionState.Queued, "premise: the call waits in the queue");
+
+        await rig.Connection.ReloadAsync(await FramesAsync(StatusReply(StatusEntries(CallerStatus, MemberStatus(memberState)))),
+            await FramesAsync(QueueStatusReply));
+
+        using var scope = new AssertionScope();
+        rig.Manager.GetByChannelId(Member).Should().BeSameAs(session, "premise: the member's leg joins the watched call");
+        session.State.Should().Be(CallSessionState.Queued, "a leg joining from a snapshot moves only a created or ringing call");
         session.HasBeenConnected.Should().BeFalse();
-        session.Events.Should().NotContain(e => e.Type == CallSessionEventType.Connected);
+        rig.Events.OfType<CallConnectedEvent>().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Reload_ShouldLeaveAHeldCallOnHold_WhenANewLegJoinsItFromTheSnapshot()
+    {
+        await using var rig = await Rig.StartAsync();
+        await rig.Connection.ReloadAsync(await FramesAsync(StatusReply(CallerStatus)), []);
+        var session = rig.Manager.GetByChannelId(Caller)
+            ?? throw new InvalidOperationException("premise: the reload opens the call");
+        rig.Deliver(await FramesAsync(CallerHeld));
+        session.State.Should().Be(CallSessionState.OnHold, "premise: the caller is on hold");
+
+        await rig.Connection.ReloadAsync(await FramesAsync(StatusReply(StatusEntries(CallerStatus, MemberStatus(6)))), []);
+
+        using var scope = new AssertionScope();
+        rig.Manager.GetByChannelId(Member).Should().BeSameAs(session, "premise: the member's leg joins the held call");
+        session.State.Should().Be(CallSessionState.OnHold, "a leg joining from a snapshot moves only a created or ringing call");
+        rig.Events.OfType<CallConnectedEvent>().Should().BeEmpty();
     }
 
     /// <summary>
@@ -419,6 +550,107 @@ public sealed class ReloadedCallOpeningStateTests
         Priority: 1
         Uniqueid: {Member}
         Linkedid: {Caller}
+
+
+        """;
+
+    private const string CallerAnsweredByTheDialplanAndQueuedLive = $"""
+        Event: Newchannel
+        Privilege: call,all
+        Channel: {CallerChannel}
+        ChannelState: 4
+        ChannelStateDesc: Ring
+        CallerIDNum: 8904
+        CallerIDName: Matrix
+        Context: capture-sip
+        Exten: aq-hangup-in
+        Priority: 1
+        Uniqueid: {Caller}
+        Linkedid: {Caller}
+
+        Event: Newstate
+        Privilege: call,all
+        Channel: {CallerChannel}
+        ChannelState: 6
+        ChannelStateDesc: Up
+        CallerIDNum: 8904
+        CallerIDName: Matrix
+        Context: capture-sip
+        Exten: aq-hangup-in
+        Priority: 1
+        Uniqueid: {Caller}
+        Linkedid: {Caller}
+
+        Event: QueueCallerJoin
+        Privilege: agent,all
+        Channel: {CallerChannel}
+        ChannelState: 6
+        ChannelStateDesc: Up
+        CallerIDNum: 8904
+        CallerIDName: Matrix
+        Context: capture-sip
+        Exten: aq-hangup-in
+        Priority: 2
+        Uniqueid: {Caller}
+        Linkedid: {Caller}
+        Queue: q-second
+        Position: 1
+        Count: 1
+
+
+        """;
+
+    private const string CallerHeld = $"""
+        Event: Hold
+        Privilege: call,all
+        Channel: {CallerChannel}
+        ChannelState: 6
+        ChannelStateDesc: Up
+        CallerIDNum: 8904
+        CallerIDName: Matrix
+        Context: capture-sip
+        Exten: aq-hangup-in
+        Priority: 2
+        Uniqueid: {Caller}
+        Linkedid: {Caller}
+        MusicClass: default
+
+
+        """;
+
+    private const string CallerAbandons = $"""
+        Event: QueueCallerAbandon
+        Privilege: agent,all
+        Channel: {CallerChannel}
+        ChannelState: 6
+        ChannelStateDesc: Up
+        Uniqueid: {Caller}
+        Linkedid: {Caller}
+        Queue: q-second
+        Position: 1
+        OriginalPosition: 1
+        HoldTime: 1
+
+        Event: QueueCallerLeave
+        Privilege: agent,all
+        Channel: {CallerChannel}
+        ChannelState: 6
+        ChannelStateDesc: Up
+        Uniqueid: {Caller}
+        Linkedid: {Caller}
+        Queue: q-second
+        Position: 1
+        Count: 0
+
+        Event: Hangup
+        Privilege: call,all
+        Channel: {CallerChannel}
+        ChannelState: 6
+        ChannelStateDesc: Up
+        Uniqueid: {Caller}
+        Linkedid: {Caller}
+        Cause: 16
+        Cause-txt: Normal Clearing
 
 
         """;
