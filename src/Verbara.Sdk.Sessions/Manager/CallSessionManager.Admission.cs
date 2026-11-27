@@ -211,7 +211,6 @@ public sealed partial class CallSessionManager
             Extension = channel.Extension
         };
         call.SetMetadata(OriginKey, OriginReload);
-        call.OpenedFromSnapshot = true;
         call.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow, CallSessionEventType.Created, channel.Name, null, null));
         if (ReportedSessionState(channel.State) is { } state)
         {
