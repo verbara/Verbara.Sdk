@@ -676,10 +676,20 @@ public sealed class CallSession
     }
 
     /// <summary>
+    /// Whether this session was opened from a channel a <c>Status</c> snapshot reported (a first load, a
+    /// post-reconnect reload or a first-attach admission) rather than from an arrival the manager watched. It sets
+    /// how far <see cref="TryRaiseToReportedState"/> may raise the session. Set once, before the session is
+    /// published; not persisted.
+    /// </summary>
+    internal bool OpenedFromSnapshot { get; set; }
+
+    /// <summary>
     /// Raises the session to the state a <c>Status</c> snapshot reported for a leg that joins it from that snapshot
     /// as a new participant, when that state is further along (<see cref="CallSessionState.Created"/> &lt;
-    /// <see cref="CallSessionState.Ringing"/> &lt; <see cref="CallSessionState.Connected"/>). Returns <c>true</c> if
-    /// it did; otherwise it changes nothing.
+    /// <see cref="CallSessionState.Ringing"/> &lt; <see cref="CallSessionState.Connected"/>). A session
+    /// <see cref="OpenedFromSnapshot"/> is raised to either; one the manager watched open is raised only to
+    /// <see cref="CallSessionState.Connected"/>, because what it watched stands, and a ringing leg tells nothing a
+    /// watched call has not shown. Returns <c>true</c> if it did; otherwise it changes nothing.
     /// <para>
     /// Whichever leg opened the call, the first one a snapshot listed (<see cref="OpenInReportedState"/>) or one the
     /// manager watched arrive before or while the snapshot was read, a leg the snapshot reports further along tells
@@ -699,7 +709,8 @@ public sealed class CallSession
     internal bool TryRaiseToReportedState(CallSessionState reported)
     {
         if (ReportedRank(reported) <= ReportedRank(State)
-            || State is not (CallSessionState.Created or CallSessionState.Ringing))
+            || State is not (CallSessionState.Created or CallSessionState.Ringing)
+            || (!OpenedFromSnapshot && reported != CallSessionState.Connected))
             return false;
 
         State = reported;

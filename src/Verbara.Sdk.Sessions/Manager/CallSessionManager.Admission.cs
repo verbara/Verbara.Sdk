@@ -153,7 +153,10 @@ public sealed partial class CallSessionManager
                         if (FindPresentParticipant(target, channel.UniqueId) is null)
                         {
                             AddAdmissionParticipant(target, channel);
-                            RaiseToReportedState(target, channel, ReportedSessionState(channel.State));
+                            // Only a leg a snapshot reported raises the call, from what that snapshot said: a leg
+                            // that arrived live after the attach is the manager's to watch, like any live join.
+                            if (channel.AdmittedFromSnapshot)
+                                RaiseToReportedState(target, channel, ReportedSessionState(channel.AdmittedState));
                             changed = true;
                         }
                     }
@@ -211,6 +214,7 @@ public sealed partial class CallSessionManager
             Extension = channel.Extension
         };
         call.SetMetadata(OriginKey, OriginReload);
+        call.OpenedFromSnapshot = true;
         call.AddEvent(new CallSessionEvent(DateTimeOffset.UtcNow, CallSessionEventType.Created, channel.Name, null, null));
         if (ReportedSessionState(channel.State) is { } state)
         {

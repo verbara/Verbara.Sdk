@@ -555,6 +555,7 @@ public sealed partial class CallSessionManager : ICallSessionManager, IQueueVisi
             // Positive evidence, read the way the ending's "cause" marker is — never inferred from
             // a null ConnectedAt.
             session.SetMetadata(OriginKey, OriginReload);
+            session.OpenedFromSnapshot = true;
         }
 
         if (reportedState is { } live)
