@@ -147,14 +147,19 @@ should read the [2.11.0 migration guide](docs/guides/migration-2.11.0.md#what-a-
   `CallResumedEvent`. The held channel's own unhold ends the hold time even after the call left `OnHold` (a held call
   that is transferred); another channel's unhold does not.
 
-### Fixed: a call answered before a reconnect reload ends `Completed` whichever order Asterisk lists its legs (#673)
+### Fixed: a call answered before a reconnect reload ends `Completed` whichever order its legs reach the SDK (#673, #NNN)
 
 A call answered before a reconnect reload, or before the manager's first attach, and waiting in a queue could end
 `Failed` with `NormalClearing` when the caller hung up normally. The `Status` snapshot opens the call from the first leg
-it lists, and when a queue member's new or ringing leg came before the caller's answered leg, the call opened as never
-connected and stayed so. Now a later leg of the same snapshot raises the call to that leg's reported state when it is
-further along, so the order no longer matters. The raise raises no `CallConnectedEvent` and stamps no `ConnectedAt`, as
-the opening itself does not; a call the manager watched, or one an observed event already moved on, keeps its state.
+it lists, and when a queue member's new or ringing leg came first, the call opened as never connected and stayed so.
+The same happened when the member's leg arrived live while the snapshot was being read and the caller's answered leg
+came from the snapshot. Now a leg the snapshot reports, joining the call as a new leg, raises the call to that leg's
+state when it is further along. A call the snapshot opened is raised to ringing or connected; a call the manager
+watched open is raised only to connected, so a ringing leg changes nothing it watched, and a leg that arrived live
+raises nothing. The raise publishes no `CallConnectedEvent` and stamps no `ConnectedAt`, as the opening does not, and
+moves no call that is queued, on hold or further along. The
+[2.11.0 migration guide](docs/guides/migration-2.11.0.md#a-call-is-announced-connected-each-time-someone-answers-it)
+lists the two cases whose ending or `ConnectedAt` this changes.
 
 ### Added: `CallConnectedEvent.AgentInterface` names the member whose connection the event announces (#615)
 
