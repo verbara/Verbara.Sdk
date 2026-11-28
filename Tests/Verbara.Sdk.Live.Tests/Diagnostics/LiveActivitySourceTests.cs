@@ -33,20 +33,21 @@ public sealed class LiveActivitySourceTests : IDisposable
     }
 
     [Fact]
-    public void StartStateLoad_ShouldCreateActivity_WithServerTag()
+    public void StartStateLoad_ShouldCreateActivity_WithNoLiveServerTag()
     {
-        using var activity = LiveActivitySource.StartStateLoad("asterisk-01", null);
+        using var activity = LiveActivitySource.StartStateLoad("n1");
 
         activity.Should().NotBeNull();
         activity!.OperationName.Should().Be("live state-load");
         activity.Kind.Should().Be(ActivityKind.Client);
-        activity.GetTagItem("live.server").Should().Be("asterisk-01");
+        activity.GetTagItem("server.id").Should().Be("n1");
+        activity.GetTagItem("live.server").Should().BeNull("2.12.0 removed the obsolete tag");
     }
 
     [Fact]
     public void SetStateLoadResult_ShouldSetTags()
     {
-        using var activity = LiveActivitySource.StartStateLoad("asterisk-01", null);
+        using var activity = LiveActivitySource.StartStateLoad(null);
 
         LiveActivitySource.SetStateLoadResult(activity, 5, 3, 12);
 
@@ -106,25 +107,25 @@ public sealed class LiveActivitySourceTests : IDisposable
         act.Should().NotThrow();
     }
 
-    // ---- server.id on Live's spans (live.server kept, obsolete) ----
+    // ---- server.id on Live's spans (no live.server since 2.12.0) ----
 
     private static readonly ActivitySource ParentSource = new("Verbara.Sdk.Live.Tests.LiveActivitySource");
 
     [Fact]
-    public void StartChannelReconcile_ShouldTagTheServerIdAndKeepLiveServer_WhenGivenAPoolId()
+    public void StartChannelReconcile_ShouldTagTheServerIdAndNoLiveServer_WhenGivenAPoolId()
     {
-        using var activity = LiveActivitySource.StartChannelReconcile("22.9.0", "n1");
+        using var activity = LiveActivitySource.StartChannelReconcile("n1");
 
         using (new AssertionScope())
         {
             activity!.GetTagItem("server.id").Should().Be("n1");
-            activity.GetTagItem("live.server").Should().Be("22.9.0", "live.server keeps its value through 2.11.0");
+            activity.GetTagItem("live.server").Should().BeNull("2.12.0 removed the obsolete tag");
             activity.GetTagItem("asterisk.server.version").Should().BeNull("the version stays a Resource attribute");
         }
     }
 
     [Fact]
-    public async Task ReconcileChannelsAsync_ShouldTagItsSpanWithThePoolIdAndTheAsteriskVersion_WhenTheServerIsInAPool()
+    public async Task ReconcileChannelsAsync_ShouldTagItsSpanWithThePoolIdAndNoLiveServer_WhenTheServerIsInAPool()
     {
         using var spans = new ServerSpans();
         await using var run = await Run.StartAsync(new BootingAsterisk { BootedAtLogin = true });
@@ -135,7 +136,7 @@ public sealed class LiveActivitySourceTests : IDisposable
         using (new AssertionScope())
         {
             span.GetTagItem("server.id").Should().Be("n1");
-            span.GetTagItem("live.server").Should().Be(run.Server.AsteriskVersion, "live.server is unchanged: the version");
+            span.GetTagItem("live.server").Should().BeNull("2.12.0 removed the obsolete tag");
             span.GetTagItem("asterisk.server.version").Should().BeNull();
         }
     }
@@ -151,7 +152,7 @@ public sealed class LiveActivitySourceTests : IDisposable
         using (new AssertionScope())
         {
             span.GetTagItem("server.id").Should().BeNull("a standalone server has no pool id, and no empty or placeholder tag");
-            span.GetTagItem("live.server").Should().Be(run.Server.AsteriskVersion);
+            span.GetTagItem("live.server").Should().BeNull("2.12.0 removed the obsolete tag");
             span.GetTagItem("asterisk.server.version").Should().BeNull();
         }
     }
@@ -186,7 +187,7 @@ public sealed class LiveActivitySourceTests : IDisposable
         using (new AssertionScope())
         {
             span.GetTagItem("server.id").Should().Be("n1");
-            span.GetTagItem("live.server").Should().BeNull("live originate never carried live.server");
+            span.GetTagItem("live.server").Should().BeNull("no Live span carries live.server");
             span.GetTagItem("asterisk.server.version").Should().BeNull();
         }
     }

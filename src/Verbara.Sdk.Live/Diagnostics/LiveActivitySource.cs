@@ -8,10 +8,9 @@ namespace Verbara.Sdk.Live.Diagnostics;
 /// <para>
 /// The <c>live state-load</c>, <c>live channel-reconcile</c> and <c>live originate</c> spans of a server in a
 /// <c>VerbaraServerPool</c> carry <c>server.id</c>, the pool id it was added under, read when the span starts; a server
-/// in no pool puts no <c>server.id</c> on them. The first two also carry <c>live.server</c>, which holds the Asterisk
-/// version, not a server identity: it is obsolete, keeps that value through 2.11.x and is removed in 2.12.0 — identify a
-/// pooled server by <c>server.id</c>. The Asterisk version is a Resource attribute (<c>asterisk.server.version</c>),
-/// never a span tag.
+/// in no pool puts no <c>server.id</c> on them. Since 2.12.0 no span carries <c>live.server</c>, the obsolete tag that
+/// held the Asterisk version rather than a server identity: identify a pooled server by <c>server.id</c>. The Asterisk
+/// version is a Resource attribute (<c>asterisk.server.version</c>), never a span tag.
 /// </para>
 /// <para>
 /// To enable tracing, register the source name with your OpenTelemetry tracer:
@@ -25,17 +24,11 @@ public static class LiveActivitySource
     /// <summary>The key a pooled server's id is tagged with, on these spans and on <c>live.status.refused</c>.</summary>
     internal const string ServerIdTag = "server.id";
 
-    // Obsolete: the Asterisk version, not the server; removed in 2.12.0.
-    private const string LiveServerTag = "live.server";
-
-    internal static Activity? StartStateLoad(string asteriskVersion, string? serverId)
+    internal static Activity? StartStateLoad(string? serverId)
     {
         var activity = Source.StartActivity("live state-load", ActivityKind.Client);
         if (activity is not null)
-        {
-            activity.SetTag(LiveServerTag, asteriskVersion);
             TagServerId(activity, serverId);
-        }
 
         return activity;
     }
@@ -56,14 +49,11 @@ public static class LiveActivitySource
         activity.SetStatus(ActivityStatusCode.Ok);
     }
 
-    internal static Activity? StartChannelReconcile(string asteriskVersion, string? serverId)
+    internal static Activity? StartChannelReconcile(string? serverId)
     {
         var activity = Source.StartActivity("live channel-reconcile", ActivityKind.Client);
         if (activity is not null)
-        {
-            activity.SetTag(LiveServerTag, asteriskVersion);
             TagServerId(activity, serverId);
-        }
 
         return activity;
     }

@@ -1141,7 +1141,7 @@ public sealed class VerbaraServer : IVerbaraServer
     /// </exception>
     public async ValueTask ReconcileChannelsAsync(CancellationToken cancellationToken = default)
     {
-        using var activity = LiveActivitySource.StartChannelReconcile(_connection.AsteriskVersion ?? "unknown", PoolId);
+        using var activity = LiveActivitySource.StartChannelReconcile(PoolId);
 
         var states = new LoadConnectionStates(_connection);
         var session = _connection is AmiConnection ami ? new LoadSession(ami, TimeProvider) : null;
@@ -1962,7 +1962,7 @@ public sealed class VerbaraServer : IVerbaraServer
     private async ValueTask ReadStateAsync(LoadConnectionStates states, Barriers barriers,
         CancellationToken cancellationToken)
     {
-        using var activity = LiveActivitySource.StartStateLoad(_connection.AsteriskVersion ?? "unknown", PoolId);
+        using var activity = LiveActivitySource.StartStateLoad(PoolId);
 
         // Bound once, here: every decision this load takes about a starting Asterisk is about the session it began on.
         var session = _connection is AmiConnection ami ? new LoadSession(ami, TimeProvider) : null;

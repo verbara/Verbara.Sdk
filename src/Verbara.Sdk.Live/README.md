@@ -96,8 +96,8 @@ await server.ReconcileChannelsAsync(cancellationToken);
   while each server's own entry remains its connection state's name.
 - Each run is traced as a `live channel-reconcile` activity, tagged `live.channels` and, on a refusal,
   `live.status.refused`, and logged at Debug. It is not reported as a state load. From 2.11.0 the `live channel-reconcile`,
-  `live state-load` and `live originate` activities of a pooled server carry `server.id` (its pool id); `live.server`
-  carries the Asterisk version, not the server, and is obsolete (removed in 2.12.0).
+  `live state-load` and `live originate` activities of a pooled server carry `server.id` (its pool id). The obsolete
+  `live.server` tag, which carried the Asterisk version rather than the server, was removed in 2.12.0.
 - From 2.11.0 `server.HasUnreconciledLoss` says whether an event the full buffer dropped has been delivered through, no
   covering read has covered it yet and no load of the server is running, and `server.UnreconciledLossDelivered` is raised
   once for each loss, when that first reads true: the
