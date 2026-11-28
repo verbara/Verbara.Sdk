@@ -26,8 +26,8 @@ jobs:
     permissions:
       contents: write # the final step creates the GitHub Release object for the tag
       checks: read # the provenance gate reads this sha's check runs
-      # ...and maps each one to the workflow run that produced it, to set release-hygiene.yml's
-      # aside by path. Job-level permissions are exhaustive: without this scope the gate FAILS,
+      # ...and maps each one to the workflow run that produced it, to set the ignored workflows
+      # (release-hygiene.yml, perf-regression.yml, Dependabot's) aside by path. Job-level permissions are exhaustive: without this scope the gate FAILS,
       # it does not degrade (ADR-0055 D1 and its 2026-09-12 addendum).
       actions: read
       # Trusted Publishing: the job's OIDC token is exchanged with nuget.org for a push key that lives one hour.
