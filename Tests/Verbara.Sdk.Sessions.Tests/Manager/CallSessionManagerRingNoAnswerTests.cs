@@ -139,6 +139,71 @@ public sealed class CallSessionManagerRingNoAnswerTests
             "a missed ring adds one missed call and changes nothing else");
     }
 
+    [Fact]
+    public async Task AgentRingNoAnswer_ShouldRaiseForTheDeliveringServersCall_WhenTwoServersHoldACallUnderTheSameIds()
+    {
+        const string other = "srv-2";
+        const string otherMissed = "PJSIP/agent3";
+        await using var rig = await WrapUpRig.StartAsync(new FakeTimeProvider(), null, ServerId, other);
+        rig.Deliver(QueueCallConnected(Queue, "c1", "m2", Answered, withConnect: false));
+        rig.DeliverTo(other, QueueCallConnected(Queue, "c1", "m2", Answered, withConnect: false));
+        var first = rig.Manager.GetByLinkedId(ServerId, "c1")
+            ?? throw new InvalidOperationException("premise: the first server holds a call under linkedid c1");
+        var second = rig.Manager.GetByLinkedId(other, "c1")
+            ?? throw new InvalidOperationException("premise: the second server holds a call under linkedid c1");
+        first.SessionId.Should().NotBe(second.SessionId, "premise: each server holds its own call");
+
+        rig.Deliver(RingNoAnswer(Queue, "c1", "c1", Missed));
+        rig.DeliverTo(other, RingNoAnswer(Queue, "c1", "c1", otherMissed));
+
+        rig.Events.OfType<CallRingNoAnswerEvent>().Select(e => (e.SessionId, e.ServerId, e.AgentId)).Should().Equal(
+            [(first.SessionId, ServerId, Missed), (second.SessionId, other, otherMissed)],
+            "a report is attributed on the server that delivered it: the same channel id and linkedid on another "
+            + "server name another call");
+    }
+
+    [Fact]
+    public async Task AgentRingNoAnswer_ShouldFindTheCallByTheCallersChannelFirst_WhenTheLinkedidNamesAnotherHeldCall()
+    {
+        await using var rig = await WrapUpRig.StartAsync(new FakeTimeProvider());
+        rig.Deliver(QueueCallConnected(Queue, "c1", "m1", Answered, withConnect: false));
+        rig.Deliver(QueueCallConnected(Queue, "c2", "m2", Answered, withConnect: false));
+
+        rig.Deliver(RingNoAnswer(Queue, callerUniqueId: "c2", linkedId: "c1", Missed));
+
+        rig.Events.OfType<CallRingNoAnswerEvent>().Select(e => e.SessionId).Should().Equal(
+            [rig.Session("c2").SessionId],
+            "the caller's own channel names the call; the Linkedid is looked up only when that channel is not held");
+    }
+
+    [Fact]
+    public async Task AgentRingNoAnswer_ShouldNameTheReportsQueue_WhenItDiffersFromTheCallsQueue()
+    {
+        await using var rig = await WrapUpRig.StartAsync(new FakeTimeProvider());
+        rig.Deliver(QueueCallConnected(Queue, "c1", "m2", Answered, withConnect: false));
+        rig.Session("c1").QueueName.Should().Be(Queue, "premise: the call joined the sales queue");
+
+        rig.Deliver(RingNoAnswer("support", "c1", "c1", Missed));
+
+        rig.Events.OfType<CallRingNoAnswerEvent>().Select(e => e.QueueName).Should().Equal(
+            ["support"], "the queue whose member missed is the one the report names; the call's queue is a fallback");
+    }
+
+    [Fact]
+    public async Task AgentRingNoAnswer_ShouldRaiseForTheCall_WhenTheCallHasNoQueue()
+    {
+        await using var rig = await WrapUpRig.StartAsync(new FakeTimeProvider());
+        rig.Deliver(NewChannel("c1", CallerChannel("c1"), "Ring", "c1", context: "from-trunk", exten: "500"));
+        rig.Session("c1").QueueName.Should().BeNull("premise: the manager never saw the caller join a queue");
+
+        rig.Deliver(RingNoAnswer(Queue, "c1", "c1", Missed), RingNoAnswer(queue: null, "c1", "c1", Missed));
+
+        rig.Events.OfType<CallRingNoAnswerEvent>().Select(e => (e.SessionId, e.QueueName)).Should().Equal(
+            [(rig.Session("c1").SessionId, Queue), (rig.Session("c1").SessionId, null)],
+            "a missed ring is reported whether or not the call joined a queue: it names the report's queue, and "
+            + "none when neither the report nor the call names one");
+    }
+
     private static AgentRingNoAnswerEvent RingNoAnswer(string? queue, string callerUniqueId, string linkedId,
         string? member, string? agent = null)
     {
