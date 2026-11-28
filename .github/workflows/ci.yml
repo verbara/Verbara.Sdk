@@ -127,7 +127,7 @@ jobs:
     # reportgenerator and gates against coverage-floor.json. Mirrors the Platform
     # pilot + Platform.Web ratchet; the floor, coverlet.runsettings exclusions
     # (test asms, generated code, migrations, container-only src assemblies —
-    # Cluster.Postgres / Sessions.Postgres / Sessions.Redis) and manual-only
+    # Cluster.Postgres / Sessions.Postgres / Sessions.Redis / Data.Npgsql) and manual-only
     # ratchet semantics (no CI write-back) are unchanged (verbara-meta/ADR-0003).
     # Baseline set 2026-06-14.
     steps:

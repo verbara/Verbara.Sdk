@@ -100,12 +100,10 @@ jobs:
       # two API calls buy what re-running the test suite here only approximates:
       # this exact sha reached `main`, and `main`'s checks were green on it.
       #
-      # Deliberately NOT a mirrored `dotnet test` run: the unit filter in `ci.yml`
-      # excludes four categories, and `Tests/Verbara.Sdk.Data.Npgsql.Tests` carries
-      # 18 `[Fact]`s with no `Category` trait at all while `PostgresFixture` starts
-      # a `postgres:18-alpine` container unconditionally. Mirroring the filter here
-      # would drag a Docker Hub pull into the release path to re-prove what `main`
-      # already proved.
+      # Deliberately NOT a mirrored `dotnet test` run: it would rebuild and re-run
+      # the whole suite to re-prove what `main`'s checks already proved on this
+      # exact sha. (The container-backed suites, `Tests/Verbara.Sdk.Data.Npgsql.Tests`
+      # included, carry `Category=Integration` and run only in the functional job.)
       # ---------------------------------------------------------------------
       - name: Verify the tagged commit shipped through main
         if: steps.identity.outputs.is_publish == 'true'
