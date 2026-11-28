@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed: disposing the session reconciliation service cancels the sweep in flight (#681)
+
+`SessionReconciliationService.Dispose()` released its cancellation source without cancelling it, so a sweep that was
+still running kept going on a token nothing could cancel. It now cancels the sweep, then releases the source. A disposal
+that races `StopAsync`, or comes twice, still throws nothing to either caller. No public API changes.
+
 ### Changed: the release provenance gate sets aside performance runs (#680)
 
 The publish job's check that the tagged commit shipped through main now ignores the check runs of
