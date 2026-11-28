@@ -264,8 +264,9 @@ public class CartesiaSpeechRecognizerTests : IAsyncLifetime
     [Fact]
     public async Task StreamAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
     {
+        using var closed = ClosedPort.Bind();
         var recognizer = BuildRecognizer(
-            o => o.BaseUri = $"ws://127.0.0.1:{ClosedPort.Reserve()}/stt/websocket");
+            o => o.BaseUri = $"ws://127.0.0.1:{closed.Port}/stt/websocket");
 
         var act = async () =>
             await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();

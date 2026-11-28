@@ -296,11 +296,12 @@ public class CartesiaSpeechSynthesizerTests : IAsyncLifetime
     [Fact]
     public async Task SynthesizeAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
     {
+        using var closed = ClosedPort.Bind();
         var synth = new CartesiaSpeechSynthesizer(Options.Create(new CartesiaOptions
         {
             ApiKey = TestApiKey,
             VoiceId = "test-voice",
-            BaseUri = $"ws://127.0.0.1:{ClosedPort.Reserve()}/tts/websocket"
+            BaseUri = $"ws://127.0.0.1:{closed.Port}/tts/websocket"
         }));
 
         var act = async () => await synth

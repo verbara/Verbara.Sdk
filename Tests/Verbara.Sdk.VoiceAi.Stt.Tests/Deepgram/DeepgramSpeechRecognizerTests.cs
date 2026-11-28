@@ -214,8 +214,9 @@ public class DeepgramSpeechRecognizerTests : IAsyncLifetime
     [Fact]
     public async Task StreamAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
     {
+        using var closed = ClosedPort.Bind();
         var recognizer = BuildRecognizer(
-            o => o.BaseUri = $"ws://127.0.0.1:{ClosedPort.Reserve()}/v1/listen");
+            o => o.BaseUri = $"ws://127.0.0.1:{closed.Port}/v1/listen");
 
         var act = async () =>
             await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();

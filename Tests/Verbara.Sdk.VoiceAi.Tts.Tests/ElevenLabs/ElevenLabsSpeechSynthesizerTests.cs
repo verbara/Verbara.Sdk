@@ -417,8 +417,9 @@ public class ElevenLabsSpeechSynthesizerTests : IAsyncLifetime
     [Fact]
     public async Task SynthesizeAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
     {
+        using var closed = ClosedPort.Bind();
         var synth = BuildSynthesizer(
-            o => o.BaseUri = $"ws://127.0.0.1:{ClosedPort.Reserve()}/v1/text-to-speech");
+            o => o.BaseUri = $"ws://127.0.0.1:{closed.Port}/v1/text-to-speech");
 
         var act = async () => await synth
             .SynthesizeAsync("test", AudioFormat.Slin16Mono8kHz)
