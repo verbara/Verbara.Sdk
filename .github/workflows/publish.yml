@@ -26,8 +26,8 @@ jobs:
     permissions:
       contents: write # the final step creates the GitHub Release object for the tag
       checks: read # the provenance gate reads this sha's check runs
-      # ...and maps each one to the workflow run that produced it, to set release-hygiene.yml's
-      # aside by path. Job-level permissions are exhaustive: without this scope the gate FAILS,
+      # ...and maps each one to the workflow run that produced it, to set the ignored workflows
+      # (release-hygiene.yml, perf-regression.yml, Dependabot's) aside by path. Job-level permissions are exhaustive: without this scope the gate FAILS,
       # it does not degrade (ADR-0055 D1 and its 2026-09-12 addendum).
       actions: read
       # Trusted Publishing: the job's OIDC token is exchanged with nuget.org for a push key that lives one hour.
@@ -100,12 +100,10 @@ jobs:
       # two API calls buy what re-running the test suite here only approximates:
       # this exact sha reached `main`, and `main`'s checks were green on it.
       #
-      # Deliberately NOT a mirrored `dotnet test` run: the unit filter in `ci.yml`
-      # excludes four categories, and `Tests/Verbara.Sdk.Data.Npgsql.Tests` carries
-      # 18 `[Fact]`s with no `Category` trait at all while `PostgresFixture` starts
-      # a `postgres:18-alpine` container unconditionally. Mirroring the filter here
-      # would drag a Docker Hub pull into the release path to re-prove what `main`
-      # already proved.
+      # Deliberately NOT a mirrored `dotnet test` run: it would rebuild and re-run
+      # the whole suite to re-prove what `main`'s checks already proved on this
+      # exact sha. (The container-backed suites, `Tests/Verbara.Sdk.Data.Npgsql.Tests`
+      # included, carry `Category=Integration` and run only in the functional job.)
       # ---------------------------------------------------------------------
       - name: Verify the tagged commit shipped through main
         if: steps.identity.outputs.is_publish == 'true'
@@ -136,14 +134,17 @@ jobs:
           # `conclusion: null`, and this workflow's own check run is one of them —
           # counting either as a failure would make the gate self-blocking.
           #
-          # Nor do two kinds of check run that say nothing about whether this commit was
+          # Nor do three kinds of check run that say nothing about whether this commit was
           # built. release-hygiene.yml runs on the push that lands the release commit, before
           # the tag exists, so its liveness check was red on exactly the commit being released
           # — by design, as a notification (ADR-0055 D5; a green run with a notice since
           # 2026-11-26, older release commits keep the red one) — and its baseline check is red
-          # if it runs after the tag; counted here, that blocked v2.5.1. Dependabot's
+          # if it runs after the tag; counted here, that blocked v2.5.1. perf-regression.yml
+          # judges benchmarks against a baseline and triggers only on schedule and
+          # workflow_dispatch, never on the way to main; a red run dispatched by hand on the
+          # candidate sha blocked v2.11.0 until it was deleted. Dependabot's
           # update runs (GitHub-assigned path dynamic/dependabot/dependabot-updates) attach to
-          # whatever commit is main's HEAD and often end cancelled. Both are excluded by
+          # whatever commit is main's HEAD and often end cancelled. All three are excluded by
           # WORKFLOW PATH (check run -> check suite -> workflow run -> path), never by name,
           # which is why this job holds `actions: read`. ADR-0055 addendum (2026-09-12).
           #

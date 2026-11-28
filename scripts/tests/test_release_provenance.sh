@@ -22,6 +22,8 @@ bad() { echo "FAIL: $1"; fails=$((fails + 1)); }
 
 SHA=019fb697f654aecbfe70d298aadc7f1c678cadc5
 HYGIENE=.github/workflows/release-hygiene.yml
+PERF=.github/workflows/perf-regression.yml
+PERF_JOB="Run BenchmarkDotNet hot-paths"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -38,6 +40,7 @@ PUBLISH=93990198232      # .github/workflows/publish.yml, push (the tag)
 OTHER=555
 DEPENDABOT=dynamic/dependabot/dependabot-updates # GitHub-assigned: no workflow file can have it
 DEPENDABOT_SUITE=666     # a Dependabot version-update run, attached to whatever commit is main's HEAD
+PERF_SUITE=777           # a perf-regression.yml run, dispatched by hand on the release candidate
 
 fresh() { : > "$CHECKS"; : > "$RUNS"; }
 
@@ -127,6 +130,16 @@ no_error_names() {
 [ -f "$SCRIPT_DIR/../../$HYGIENE" ] && ok || bad "$HYGIENE must exist — the gate ignores check runs by that exact path"
 grep -qxF "HYGIENE_WORKFLOW='$HYGIENE'" "$GATE" && ok || bad "the gate's HYGIENE_WORKFLOW must be '$HYGIENE'"
 grep -qxF "DEPENDABOT_WORKFLOW='$DEPENDABOT'" "$GATE" && ok || bad "the gate's DEPENDABOT_WORKFLOW must be '$DEPENDABOT'"
+[ -f "$SCRIPT_DIR/../../$PERF" ] && ok || bad "$PERF must exist — the gate ignores check runs by that exact path"
+grep -qxF "PERF_WORKFLOW='$PERF'" "$GATE" && ok || bad "the gate's PERF_WORKFLOW must be '$PERF'"
+
+# The perf exclusion is sound only while that workflow never runs on a pull request or a queue entry:
+# then none of its runs is part of how a commit reaches main. Its `on:` keys must stay exactly
+# `schedule` and `workflow_dispatch`; adding a trigger must fail HERE and make the exclusion a decision.
+perf_triggers="$(awk '/^on:/ { on = 1; next } on && /^[^ #]/ { exit } on && /^  [A-Za-z_]+:/ { sub(/^  /, ""); sub(/:.*/, ""); print }' \
+                   "$SCRIPT_DIR/../../$PERF" | sort | tr '\n' ' ')"
+[ "$perf_triggers" = "schedule workflow_dispatch " ] && ok \
+  || bad "$PERF must trigger on schedule and workflow_dispatch only (found: '$perf_triggers') — the gate ignores its runs on that premise"
 
 # =============================================================================================
 # green — and the notice appears only when something was ignored
@@ -280,6 +293,70 @@ for path in .github/workflows/dependabot-updates.yml dynamic/dependabot/other \
   workflow "$OTHER" "$path"
   check "$OTHER" "Dependabot" completed cancelled
   run 1 "only Dependabot's exact path is ignored — not '$path'"
+done
+
+# =============================================================================================
+# perf-regression.yml — judges performance against a baseline, never part of how a commit lands
+# =============================================================================================
+# 2.11.0: an owner-accepted red run, dispatched by hand on the candidate sha, blocked the publish.
+landed
+workflow "$PERF_SUITE" "$PERF"
+check "$PERF_SUITE" "$PERF_JOB" completed failure
+run 0 "a red perf-regression.yml run on the release commit (the 2.11.0 block)"
+says "::notice::release-provenance: ignored 1 check run(s) from $PERF" "the perf exclusion is announced, with its path"
+says "\"$PERF_JOB\" (failure)" "the notice names the perf run it ignored"
+says "judge performance against a baseline" "the notice says why the perf run is ignored"
+says "13 completed check run(s), all green" "everything else is still judged"
+lacks "::error::" "the ignored perf failure is not an error"
+
+landed
+workflow "$PERF_SUITE" "$PERF"
+check "$PERF_SUITE" "$PERF_JOB" completed failure
+check "$AOT_PUSH" "aot-check" completed failure
+run 1 "a perf-regression.yml run hides nothing next to it"
+errors_name '"aot-check" concluded failure — .github/workflows/aot-validate.yml' "the real failure is named"
+errors_name "has 1 non-green check run(s) of 14 completed" "the count leaves out the ignored perf run"
+no_error_names "$PERF_JOB" "the ignored perf run is not given as the reason"
+
+release_2_5_1 failure success
+workflow "$PERF_SUITE" "$PERF"
+check "$PERF_SUITE" "$PERF_JOB" completed failure
+run 0 "two exclusions at once: release-hygiene.yml red and perf-regression.yml red"
+says "ignored 2 check run(s) from $HYGIENE" "the hygiene exclusion keeps its own line"
+says "ignored 1 check run(s) from $PERF" "the perf exclusion keeps its own line"
+
+fresh
+cp "$WORK/suites.json" "$RUNS"
+workflow "$PERF_SUITE" "$PERF"
+check "$PERF_SUITE" "$PERF_JOB" completed success
+check "$PUBLISH" "Pack and push to nuget.org" in_progress
+run 1 "only a perf-regression.yml run completed — no evidence, even green"
+errors_name "No completed check runs for $SHA outside $PERF — nothing proves this commit was ever built." "the evidence error names the perf path"
+
+# By path, never by name: the perf job's name in any other workflow, or in an unowned suite, counts.
+landed
+workflow "$OTHER" .github/workflows/other.yml
+check "$OTHER" "$PERF_JOB" completed failure
+run 1 "a check named like the perf job in another workflow still counts"
+errors_name "\"$PERF_JOB\" concluded failure — .github/workflows/other.yml" "it is named with its own workflow"
+lacks "::notice::" "nothing was ignored for the look-alike perf job"
+
+landed
+check 434343 "$PERF_JOB" completed failure
+run 1 "a check named like the perf job with no workflow run is not ignored"
+
+landed
+workflow "$PERF_SUITE" "$PERF"
+workflow "$PERF_SUITE" .github/workflows/other.yml
+check "$PERF_SUITE" "$PERF_JOB" completed failure
+run 1 "a check suite claimed by perf-regression.yml and another path is not ignored"
+
+for p in .github/workflows/perf-regression.yaml .github/workflows/Perf-Regression.yml \
+         .github/workflows/nested/perf-regression.yml perf-regression.yml "$PERF@refs/heads/main" " $PERF"; do
+  landed
+  workflow "$OTHER" "$p"
+  check "$OTHER" "$PERF_JOB" completed failure
+  run 1 "only the exact perf path is ignored — not '$p'"
 done
 
 # =============================================================================================

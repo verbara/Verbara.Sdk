@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed: the release provenance gate sets aside performance runs (#680)
+
+The publish job's check that the tagged commit shipped through main now ignores the check runs of
+`.github/workflows/perf-regression.yml`, matched by workflow path as it already does for release hygiene and
+Dependabot's updates. That workflow judges benchmarks against a baseline and runs only on a schedule or by hand, so it
+never shows whether a commit was built. A hand-dispatched red performance run on the 2.11.0 candidate, already reviewed
+and accepted, had refused the publish. A performance regression on a candidate is now read from the performance
+workflow and its breach issue. No package changes.
+
 ## [2.11.0] - 2026-11-26
 
 ### Changed — BREAKING: six `StatusEvent` members and seven AMI types deprecated for 2.11.0 are removed (#621)

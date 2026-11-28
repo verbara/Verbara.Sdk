@@ -5,6 +5,7 @@ using Xunit;
 namespace Verbara.Sdk.Data.Npgsql.Tests;
 
 [Collection("postgres")]
+[Trait("Category", "Integration")]
 public sealed class NpgsqlReaderExtensionsTests
 {
     private readonly NpgsqlDataSource _dataSource;

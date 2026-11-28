@@ -309,6 +309,7 @@ public class LmntSpeechSynthesizerWsTests : IAsyncLifetime
     [Fact]
     public async Task SynthesizeAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
     {
+        using var closed = ClosedPort.Bind();
         // The port is the seam on this surface (there is no BaseUri option), so it is passed directly
         // rather than through BuildSynthesizer — the point of this test is that it never reaches the fake.
         var synth = new LmntSpeechSynthesizer(
@@ -318,7 +319,7 @@ public class LmntSpeechSynthesizerWsTests : IAsyncLifetime
                 Voice = LmntVoices.Leah,
                 Transport = LmntTransport.WebSocket,
             }),
-            fakeWsPort: ClosedPort.Reserve());
+            fakeWsPort: closed.Port);
 
         var act = async () => await synth
             .SynthesizeAsync("test", AudioFormat.Slin16Mono16kHz)

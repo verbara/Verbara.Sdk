@@ -284,13 +284,14 @@ public class DeepgramSpeechSynthesizerTests : IAsyncLifetime
     [Fact]
     public async Task SynthesizeAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
     {
+        using var closed = ClosedPort.Bind();
         var synth = new DeepgramSpeechSynthesizer(Options.Create(new DeepgramTtsOptions
         {
             ApiKey = TestApiKey,
             Model = DeepgramVoices.Thalia,
             Encoding = "linear16",
             SampleRate = 16000,
-            BaseUri = $"ws://127.0.0.1:{ClosedPort.Reserve()}/v1/speak",
+            BaseUri = $"ws://127.0.0.1:{closed.Port}/v1/speak",
         }));
 
         var act = async () => await synth
