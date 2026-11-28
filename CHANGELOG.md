@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### Changed — BREAKING: the MeetMe names and the live.server span tag deprecated for 2.12.0 are removed (#NNN)
+### Changed — BREAKING: the MeetMe names and the live.server span tag deprecated for 2.12.0 are removed (#683)
 
 The `Verbara.Sdk.Live` surface whose 2.11.0 warning said "Removed in Verbara.Sdk 2.12.0." is gone, and its id
 `VSDK0008` is retired. The [2.12.0 migration guide](docs/guides/migration-2.12.0.md) has the details and the
