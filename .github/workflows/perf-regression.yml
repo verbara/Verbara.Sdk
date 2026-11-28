@@ -227,17 +227,18 @@ jobs:
           dotnet run -c Release --no-build -- --filter '*AsyncEventPump*' --exporters json --artifacts ../../artifacts/async-event-pump || true
       # Queue and conference managers: the same publication path as ChannelManager, each event with
       # and without one subscriber, because only the subscribed row shows what a change a handler
-      # hears costs. Gated on bytes per event; time bands follow two weekly runs.
+      # hears costs. QueueManager is gated on bytes per event; ConferenceManager runs unbanded
+      # until its rows are banded from its own runs. Time bands follow two weekly runs.
       - name: QueueManager event paths
         timeout-minutes: 8
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
           dotnet run -c Release --no-build -- --filter '*QueueManager*' --exporters json --artifacts ../../artifacts/queue-manager || true
-      - name: MeetMeManager event paths
+      - name: ConferenceManager event paths
         timeout-minutes: 8
         run: |
           cd Tests/Verbara.Sdk.Benchmarks
-          dotnet run -c Release --no-build -- --filter '*MeetMeManager*' --exporters json --artifacts ../../artifacts/meetme-manager || true
+          dotnet run -c Release --no-build -- --filter '*ConferenceManager*' --exporters json --artifacts ../../artifacts/conference-manager || true
 
       # ── The gate itself (ADR-0042 D4) ────────────────────────────────────────
       # Bytes decide, time informs: rows with a `bytes` entry are gated on

@@ -60,7 +60,7 @@
     "turn-detection": "Verbara.Sdk.Benchmarks.TurnDetectionBenchmark",
     "async-event-pump": "Verbara.Sdk.Benchmarks.AsyncEventPumpBenchmark",
     "queue-manager": "Verbara.Sdk.Benchmarks.QueueManagerBenchmark",
-    "meetme-manager": "Verbara.Sdk.Benchmarks.MeetMeManagerBenchmark",
+    "conference-manager": "Verbara.Sdk.Benchmarks.ConferenceManagerBenchmark",
     "_turn_detection_note": "Present here with NO rows in \"benchmarks\" below, and that is deliberate rather than an oversight: its four cases are declared in `unbanded`, so their presence and their measurement are checked and their value is not banded. The step must run and produce a report — a missing results/ directory is still a hard failure, which is the point — but its band cannot be calibrated yet: every other band in this file came from 13 observed runs and this benchmark has none. The PR that flipped PERF_GATE_ENFORCE left it unbaselined; its band is set from its own observations, in its own PR. Guessing one here would break the rule this file exists to enforce, in the change that wrote it."
   },
   "unbanded": {
@@ -85,6 +85,18 @@
     },
     "Verbara.Sdk.Benchmarks.AsyncEventPumpBenchmark.Refuse9000Of10000Events": {
       "reason": "Added by #549 with no entry: the refusal path's bytes and time have not been read on the hosted runner yet; its entry is set from hosted runs, in its own PR."
+    },
+    "Verbara.Sdk.Benchmarks.ConferenceManagerBenchmark.Mute_NoSubscriber": {
+      "reason": "Renamed in 2.12.0; banded from its own runs in its own PR."
+    },
+    "Verbara.Sdk.Benchmarks.ConferenceManagerBenchmark.Mute_OneSubscriber": {
+      "reason": "Renamed in 2.12.0; banded from its own runs in its own PR."
+    },
+    "Verbara.Sdk.Benchmarks.ConferenceManagerBenchmark.JoinLeave": {
+      "reason": "Renamed in 2.12.0; banded from its own runs in its own PR."
+    },
+    "Verbara.Sdk.Benchmarks.ConferenceManagerBenchmark.Reconcile_RemovesParticipants": {
+      "reason": "Renamed in 2.12.0; banded from its own runs in its own PR."
     }
   },
   "benchmarks": {
@@ -250,22 +262,6 @@
     },
     "Verbara.Sdk.Benchmarks.QueueManagerBenchmark.JoinLeave_OneSubscriber": {
       "bytes": 528,
-      "bytes_tolerance": 0
-    },
-    "Verbara.Sdk.Benchmarks.MeetMeManagerBenchmark.Mute_NoSubscriber": {
-      "bytes": 0,
-      "bytes_tolerance": 0
-    },
-    "Verbara.Sdk.Benchmarks.MeetMeManagerBenchmark.Mute_OneSubscriber": {
-      "bytes": 176,
-      "bytes_tolerance": 0
-    },
-    "Verbara.Sdk.Benchmarks.MeetMeManagerBenchmark.JoinLeave": {
-      "bytes": 104,
-      "bytes_tolerance": 0
-    },
-    "Verbara.Sdk.Benchmarks.MeetMeManagerBenchmark.Reconcile_RemovesParticipants": {
-      "bytes": 276,
       "bytes_tolerance": 0
     }
   }

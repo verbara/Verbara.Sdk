@@ -565,6 +565,39 @@ class CheckPerfAbabTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stdout)
         self.assertEqual("head-only", self._row(f"{other}.Run")["class"])
 
+    def test_Main_ShouldListTheRenamedClassAsHeadOnly_WhenTheReferenceRanItUnderItsFormerName(self):
+        # A class renamed since the tag: HEAD declares the new name, unbanded until its own runs
+        # band it; the reference lists and measures the former name, which HEAD no longer
+        # declares. The new name's cases are HEAD only and the former name is ignored, so a
+        # rename never reads as structural.
+        former = "Verbara.Sdk.Benchmarks.FormerNameBenchmark"
+        renamed = "Verbara.Sdk.Benchmarks.RenamedBenchmark"
+        self.baseline["sources"]["renamed"] = renamed
+        self.baseline["unbanded"][f"{renamed}.Run"] = {"reason": "renamed; banded later"}
+        self.lists["R"].append(f"{former}.Run")
+        self.lists["H"].append(f"{renamed}.Run")
+        self.set_arm("H", f"{renamed}.Run", mean=500.0, allocated=176)
+        self._materialize()
+        # The reference's report of the former name sits in its own file, as BenchmarkDotNet
+        # writes one per class.
+        for pos, arm in enumerate(self.order, start=1):
+            if arm == "R":
+                with open(os.path.join(self.root, f"{pos}-R", "results",
+                                       f"{former}-report-full-compressed.json"), "w",
+                          encoding="utf-8") as handle:
+                    handle.write(json.dumps({"Title": "FormerNameBenchmark", "Benchmarks": [
+                        {"Namespace": "Verbara.Sdk.Benchmarks", "Type": "FormerNameBenchmark",
+                         "Method": "Run", "FullName": f"{former}.Run",
+                         "Statistics": {"N": 3, "Mean": 500.0, "Median": 500.0},
+                         "Memory": {"BytesAllocatedPerOperation": 176}}]}))
+        result = self._run(enforce=True, materialize=False)
+        self.assertEqual([], self._structural())
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertEqual("head-only", self._row(f"{renamed}.Run")["class"])
+        self.assertFalse(self._row(f"{renamed}.Run")["judged"])
+        self.assertNotIn(former, json.dumps(self._json()["rows"]))
+        self.assertIn("HEAD only", self._md())
+
     def test_Main_ShouldBeStructural_WhenAReportCaseIsNotInItsArmList(self):
         self.lists["H"].remove(_BETA)
         self.lists["R"].remove(_BETA)

@@ -13,7 +13,7 @@ namespace Verbara.Sdk.Benchmarks;
 /// </summary>
 [MemoryDiagnoser]
 [ShortRunJob]
-public class MeetMeManagerBenchmark
+public class ConferenceManagerBenchmark
 {
     private const int N = 1000;
     private const string ChurnRoom = "200";
