@@ -913,6 +913,17 @@ stayed red through the testing between the version bump and the tag; the second 
 release whose notes do not fit now publishes a shortened description. The check fails only when it cannot tell: no
 `<PackageVersion>`, no git repository, a shallow clone, or no `v*` tags. No package changes.
 
+### Changed: build, CI and test fixes that leave the packages as they were (#589, #590, #612, #665, #670)
+
+None of these changes what a package does; they are listed so the release cites every change it shipped.
+
+- The docs-only fast path's drift guard reads the real list of documentation snippet sources (#589).
+- The weekly performance gate fails when a benchmark with no band measured nothing, instead of reading it as a
+  pass (#590).
+- The AMI writer and its tests build clean under the .NET 11 SDK's new analyzers (#612).
+- The publish liveness check no longer fails when a long list of paths closes its pipe early (#665).
+- A threaded time provider in the tests checks a nested hold once instead of twice (#670).
+
 ## [2.10.1] - 2026-11-16
 
 ### Fixed: `CompositeAudioServer.OnStreamConnected` announces each stream as the server that accepted it does (#584)
