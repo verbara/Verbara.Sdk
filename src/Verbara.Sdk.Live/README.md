@@ -67,7 +67,8 @@ change; a throwing `AgentStateChanged` subscriber no longer skips the `AgentConn
 
 Conference rooms are `server.Conferences` (`ConferenceManager`, `ConferenceRoom`, `ConferenceUser`) from 2.11.0. The
 former names, deprecated in 2.11.0 (`VSDK0008`), were removed in 2.12.0, and `ConferenceManager` is sealed from 2.12.0;
-see the [2.11.0 migration guide](../../docs/guides/migration-2.11.0.md#the-conference-types-are-named-for-what-they-track).
+see the [2.12.0 migration guide](../../docs/guides/migration-2.12.0.md#the-meetme-names-of-the-conference-table-are-removed)
+and, for the rename itself, the [2.11.0 migration guide](../../docs/guides/migration-2.11.0.md#the-conference-types-are-named-for-what-they-track).
 
 ## Reconciling the channels
 

@@ -374,6 +374,9 @@ each event once per subscriber, and every room and participant is the same insta
 
 #### VSDK0008
 
+> **Removed in 2.12.0.** The five former names below are gone and `ConferenceManager` is sealed; see
+> [Upgrading to 2.12.0](migration-2.12.0.md#the-meetme-names-of-the-conference-table-are-removed).
+
 | Former name (`VSDK0008`) | New name | Removed in |
 |---|---|---|
 | `VerbaraServer.MeetMe` | `VerbaraServer.Conferences`, which returns the same instance | 2.12.0 |
@@ -1345,6 +1348,8 @@ signatures and results do not change.
 ## Span tags
 
 ### The `live.server` span tag is obsolete
+
+> **Removed in 2.12.0.** See [Upgrading to 2.12.0](migration-2.12.0.md#the-liveserver-span-tag-is-removed).
 
 **What changed.** `live.server` on the `live channel-reconcile` and `live state-load` spans holds the Asterisk version,
 not a server identity. It keeps that value through 2.11.x, and 2.12.0 removes the tag. 2.11.0 adds `server.id`, the
