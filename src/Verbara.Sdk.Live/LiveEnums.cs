@@ -34,10 +34,3 @@ public enum ConferenceUserState
     Left,
 }
 
-/// <summary>The former name of <see cref="ConferenceUserState"/>.</summary>
-/// <remarks><c>Talking</c> was never assigned: whether a participant is talking is <c>ConferenceUser.Talking</c>.</remarks>
-[Obsolete(
-    "Renamed to ConferenceUserState, which has Joined and Left with the same values. Talking was never assigned; read ConferenceUser.Talking. Removed in Verbara.Sdk 2.12.0.",
-    DiagnosticId = "VSDK0008",
-    UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.11.0.md#vsdk0008")]
-public enum MeetMeUserState { Joined, Left, Talking }

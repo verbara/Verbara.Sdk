@@ -5,10 +5,6 @@
     <IsTestProject>false</IsTestProject>
     <!-- BenchmarkDotNet requires instance methods; suppress CA1822 -->
     <NoWarn>$(NoWarn);CA1822</NoWarn>
-    <!-- MeetMeManagerBenchmark keeps the former conference names until 2.12.0 removes them, so its source and its rows
-         stay those of the previous release for the ABAB; a MeetMeManager subscriber is the costlier of the two names.
-         The deprecation guard fails this line once VSDK0008 is retired. -->
-    <NoWarn>$(NoWarn);VSDK0008</NoWarn>
     <!-- QueueHangupBenchmark calls the queue table's hangup entry; without it the rows measure the loop alone (the
          reference side of an ABAB against a tree that has no such entry). -->
     <DefineConstants>$(DefineConstants);QUEUE_HANGUP_RULE</DefineConstants>

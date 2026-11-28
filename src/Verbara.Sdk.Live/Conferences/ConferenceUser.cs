@@ -1,10 +1,7 @@
 namespace Verbara.Sdk.Live.Conferences;
 
 /// <summary>A participant of a <see cref="ConferenceRoom"/>.</summary>
-/// <remarks>
-/// Only the manager creates and changes participants. Until 2.12.0 every participant it reports is also a
-/// <c>MeetMeUser</c>, the same object under its former name.
-/// </remarks>
+/// <remarks>Only the manager creates and changes participants.</remarks>
 public class ConferenceUser
 {
     internal ConferenceUser()

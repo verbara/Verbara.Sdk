@@ -88,11 +88,11 @@ internal static class DeprecationIdRegister
                 new(Ami, "DbPrefixGetAction"), new(Ami, "ExecAction"), new(Ami, "JitterBufStatsEvent"), new(Ami, "MasqueradeEvent"),
                 new(Ami, "PriEventEvent"), new(Ami, "RtpReceiverStatEvent"), new(Ami, "RtpSenderStatEvent"),
             ]),
-        new("VSDK0008", DeprecationIdState.Marked, "2.12.0", MigrationGuide2_11,
+        new("VSDK0008", DeprecationIdState.Retired, "2.12.0", MigrationGuide2_11, [],
             [
                 new(Live, "MeetMeManager"), new(Live, "MeetMeRoom"), new(Live, "MeetMeUser"), new(Live, "MeetMeUserState"),
                 new(Live, "VerbaraServer.MeetMe"),
-            ], []),
+            ]),
         new("VSDK0009", DeprecationIdState.Marked, "2.12.0", MigrationGuide2_11, [new(Sessions, "CallFailedEvent")], []),
     ];
 

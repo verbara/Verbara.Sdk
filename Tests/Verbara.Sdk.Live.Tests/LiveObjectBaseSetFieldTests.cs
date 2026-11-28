@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using Verbara.Sdk.Live.Bridges;
 using Verbara.Sdk.Live.Conferences;
-using Verbara.Sdk.Live.MeetMe;
 using FluentAssertions;
 
 namespace Verbara.Sdk.Live.Tests;
@@ -52,7 +51,7 @@ public sealed class LiveObjectBaseSetFieldTests
     }
 
     [Fact]
-    public void MeetMeUser_ShouldExposeAllProperties()
+    public void ConferenceUser_ShouldExposeAllProperties()
     {
         var user = new ConferenceUser
         {
@@ -70,11 +69,10 @@ public sealed class LiveObjectBaseSetFieldTests
         user.Talking.Should().BeTrue();
     }
 
-#pragma warning disable VSDK0008 // The former names keep their public setters and mutable Users until 2.12.0.
     [Fact]
-    public void MeetMeUser_ShouldAllowMutedAndTalkingStateChanges()
+    public void ConferenceUser_ShouldAllowMutedAndTalkingStateChanges()
     {
-        var user = new MeetMeUser { UserNum = 2, Channel = "SIP/200" };
+        var user = new ConferenceUser { UserNum = 2, Channel = "SIP/200" };
 
         user.Muted = true;
         user.Talking = true;
@@ -84,16 +82,16 @@ public sealed class LiveObjectBaseSetFieldTests
     }
 
     [Fact]
-    public void MeetMeRoom_UserCount_ShouldReflectUsersCollection()
+    public void ConferenceRoom_UserCount_ShouldReflectUsersCollection()
     {
-        var room = new MeetMeRoom { RoomNumber = "1000" };
-        room.Users.TryAdd("SIP/100-00000001", new MeetMeUser { UserNum = 0, Channel = "SIP/100-00000001" });
-        room.Users.TryAdd("SIP/200-00000002", new MeetMeUser { UserNum = 0, Channel = "SIP/200-00000002" });
+        var room = new ConferenceRoom { RoomNumber = "1000" };
+        room.Table.TryAdd("SIP/100-00000001", new ConferenceUser { UserNum = 0, Channel = "SIP/100-00000001" });
+        room.Table.TryAdd("SIP/200-00000002", new ConferenceUser { UserNum = 0, Channel = "SIP/200-00000002" });
 
         room.UserCount.Should().Be(2, "two channels sharing ConfBridge user number 0 are two participants");
         room.RoomNumber.Should().Be("1000");
+        room.Users.Should().HaveCount(2);
     }
-#pragma warning restore VSDK0008
 
     [Fact]
     public void AsteriskBridge_ShouldSupportAllProperties()

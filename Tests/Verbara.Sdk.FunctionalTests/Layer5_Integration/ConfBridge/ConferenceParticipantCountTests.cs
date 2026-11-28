@@ -31,7 +31,7 @@ public sealed class ConferenceParticipantCountTests : FunctionalTestBase
     }
 
     [Fact]
-    public async Task MeetMe_ShouldCountEachCallerAndKeepRoomUntilLastLeaves_WhenTwoCallersJoinOneConfBridge()
+    public async Task Conferences_ShouldCountEachCallerAndKeepRoomUntilLastLeaves_WhenTwoCallersJoinOneConfBridge()
     {
         var conference = $"test-conf-count-{Guid.NewGuid():N}";
 

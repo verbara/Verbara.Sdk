@@ -212,7 +212,7 @@ public sealed class LiveEventOrderAcrossThreadsTests
     }
 
     [Fact]
-    public void MeetMeManager_ShouldRaiseEachParticipantsEventsInOrder_WhenManyThreadsChangeThem()
+    public void ConferenceManager_ShouldRaiseEachParticipantsEventsInOrder_WhenManyThreadsChangeThem()
     {
         var log = new ConcurrentQueue<(object Key, char Kind)>();
         _rooms.UserJoined += (_, user) => { log.Enqueue((user, 'J')); YieldSometimes(); };

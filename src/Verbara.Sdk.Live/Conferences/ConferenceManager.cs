@@ -1,11 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Verbara.Sdk.Live.Diagnostics;
-using Verbara.Sdk.Live.MeetMe;
-
-// The table holds MeetMeRoom and MeetMeUser instances, so the conference names and the former MeetMe names reach the
-// same objects until 2.12.0 removes the MeetMe types; this file then builds ConferenceRoom and ConferenceUser.
-#pragma warning disable VSDK0008
 
 namespace Verbara.Sdk.Live.Conferences;
 
@@ -55,18 +50,12 @@ internal static partial class ConferenceManagerLog
 /// </summary>
 /// <remarks>
 /// Manager operations serialize conference lifetime and state changes with listing application. A
-/// <see cref="ConferenceRoom"/> and a <see cref="ConferenceUser"/> are read-only to a consumer; the former
-/// <see cref="MeetMeRoom.Users"/> dictionary and the <see cref="MeetMeUser"/> setters, which can write them, are outside
-/// that synchronization.
-/// <para>
-/// Until 2.12.0 removes them, <see cref="MeetMeManager"/>, <see cref="MeetMeRoom"/> and <see cref="MeetMeUser"/> are
-/// the same objects under their former names: the server's <see cref="Server.VerbaraServer.MeetMe"/> is this instance,
-/// and every room and participant this manager reports is a <see cref="MeetMeRoom"/> and a <see cref="MeetMeUser"/>.
-/// </para>
+/// <see cref="ConferenceRoom"/> and a <see cref="ConferenceUser"/> are read-only to a consumer: only this manager
+/// creates and changes them. The class is sealed.
 /// </remarks>
-public class ConferenceManager
+public sealed class ConferenceManager
 {
-    private readonly ConcurrentDictionary<string, MeetMeRoom> _rooms = new();
+    private readonly ConcurrentDictionary<string, ConferenceRoom> _rooms = new();
     private readonly ILogger _logger;
 
     // The admission ordinal, advanced under _windowGate. A listing cannot change a participant admitted after it opened.
@@ -115,7 +104,7 @@ public class ConferenceManager
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                LiveMetrics.MeetMeSubscriberFaults.Add(1);
+                LiveMetrics.ConferenceSubscriberFaults.Add(1);
                 ReportSubscriberFailure(ex, eventName, room.RoomNumber, user.Channel);
             }
         }
@@ -180,11 +169,6 @@ public class ConferenceManager
     /// <param name="roomNumber">The conference name.</param>
     public ConferenceRoom? GetRoom(string roomNumber) => _rooms.GetValueOrDefault(roomNumber);
 
-    // The same rooms under their former type, for MeetMeManager.
-    private protected IReadOnlyCollection<MeetMeRoom> MeetMeRooms => _rooms.Values.ToList().AsReadOnly();
-
-    private protected MeetMeRoom? GetMeetMeRoom(string roomNumber) => _rooms.GetValueOrDefault(roomNumber);
-
     /// <summary>
     /// Records a participant's join, keyed by <paramref name="channel"/>. The room is created if it
     /// is not held. A join for a channel already held in the room replaces that participant and
@@ -237,12 +221,12 @@ public class ConferenceManager
 
         lock (_windowGate)
         {
-            var user = new MeetMeUser
+            var user = new ConferenceUser
             {
                 UserNum = userNum,
                 Channel = channel,
                 UniqueId = uniqueId,
-                State = MeetMeUserState.Joined,
+                State = ConferenceUserState.Joined,
                 Muted = muted,
                 JoinMark = ++_changes,
             };
@@ -251,16 +235,16 @@ public class ConferenceManager
             foreach (var window in _openWindows)
                 window.Participants.Remove((roomNumber, channel));
 
-            var room = _rooms.GetOrAdd(roomNumber, static rn => new MeetMeRoom { RoomNumber = rn });
+            var room = _rooms.GetOrAdd(roomNumber, static rn => new ConferenceRoom { RoomNumber = rn });
             lock (room.SyncRoot)
             {
-                if (room.Users.TryGetValue(channel, out var replaced) && IsAnotherParticipant(replaced, uniqueId))
+                if (room.Table.TryGetValue(channel, out var replaced) && IsAnotherParticipant(replaced, uniqueId))
                     MarkGone(replaced);
-                room.Users[channel] = user;
+                room.Table[channel] = user;
                 ConferenceManagerLog.UserJoined(_logger, roomNumber, channel, userNum);
                 if (UserJoined is not null)
                 {
-                    _events.Post(static (m, r, u) => ((ConferenceManager)m).Raise(((ConferenceManager)m).UserJoined, nameof(UserJoined), (MeetMeRoom)r!, (MeetMeUser)u!),
+                    _events.Post(static (m, r, u) => ((ConferenceManager)m).Raise(((ConferenceManager)m).UserJoined, nameof(UserJoined), (ConferenceRoom)r!, (ConferenceUser)u!),
                         this, room, user);
                 }
             }
@@ -269,14 +253,14 @@ public class ConferenceManager
     }
 
     // The queue side's rule for a caller: the same Uniqueid, or a side without one, is the same participant.
-    private static bool IsAnotherParticipant(MeetMeUser held, string? uniqueId) =>
+    private static bool IsAnotherParticipant(ConferenceUser held, string? uniqueId) =>
         !string.IsNullOrEmpty(held.UniqueId) && !string.IsNullOrEmpty(uniqueId)
         && !string.Equals(held.UniqueId, uniqueId, StringComparison.Ordinal);
 
     // Under the room lock. For a participant taken out of the table with no event: nothing raises, nothing counts.
-    private static void MarkGone(MeetMeUser user)
+    private static void MarkGone(ConferenceUser user)
     {
-        user.State = MeetMeUserState.Left;
+        user.State = ConferenceUserState.Left;
         user.MarkLeaveNotObserved();
     }
 
@@ -306,10 +290,10 @@ public class ConferenceManager
 
                 lock (room.SyncRoot)
                 {
-                    if (!room.Users.TryRemove(channel, out var user))
+                    if (!room.Table.TryRemove(channel, out var user))
                         return;
 
-                    user.State = MeetMeUserState.Left;
+                    user.State = ConferenceUserState.Left;
                     RemoveIfEmpty(room);
                     ConferenceManagerLog.UserLeft(_logger, roomNumber, user.Channel, user.UserNum);
                     PostUserLeft(room, user);
@@ -369,7 +353,7 @@ public class ConferenceManager
 
                 lock (room.SyncRoot)
                 {
-                    if (!room.Users.TryGetValue(channel, out var user))
+                    if (!room.Table.TryGetValue(channel, out var user))
                     {
                         ConferenceManagerLog.ParticipantNotHeld(_logger, eventName, roomNumber, channel);
                         return;
@@ -388,7 +372,7 @@ public class ConferenceManager
     // Caller holds _windowGate and room.SyncRoot. Snapshot writes use this origin-neutral path: they are not live
     // reports against other windows. Posts one notification per field that actually changed, in the order of the
     // changes; the caller raises them once it has released the gate.
-    private void ApplyField(MeetMeRoom room, MeetMeUser user, bool value, bool isMuted)
+    private void ApplyField(ConferenceRoom room, ConferenceUser user, bool value, bool isMuted)
     {
         var changed = (isMuted ? user.Muted : user.Talking) != value;
         if (isMuted)
@@ -404,18 +388,18 @@ public class ConferenceManager
 
         if (changed && UserStateChanged is not null)
         {
-            _events.Post(static (m, r, u) => ((ConferenceManager)m).Raise(((ConferenceManager)m).UserStateChanged, nameof(UserStateChanged), (MeetMeRoom)r!, (MeetMeUser)u!),
+            _events.Post(static (m, r, u) => ((ConferenceManager)m).Raise(((ConferenceManager)m).UserStateChanged, nameof(UserStateChanged), (ConferenceRoom)r!, (ConferenceUser)u!),
                 this, room, user);
         }
     }
 
     // Posted under the room lock of the leave. Queued only when a handler is subscribed; the raise reads the handler
     // list again, so one unsubscribed in between is not called.
-    private void PostUserLeft(MeetMeRoom room, MeetMeUser user)
+    private void PostUserLeft(ConferenceRoom room, ConferenceUser user)
     {
         if (UserLeft is not null)
         {
-            _events.Post(static (m, r, u) => ((ConferenceManager)m).Raise(((ConferenceManager)m).UserLeft, nameof(UserLeft), (MeetMeRoom)r!, (MeetMeUser)u!),
+            _events.Post(static (m, r, u) => ((ConferenceManager)m).Raise(((ConferenceManager)m).UserLeft, nameof(UserLeft), (ConferenceRoom)r!, (ConferenceUser)u!),
                 this, room, user);
         }
     }
@@ -462,11 +446,11 @@ public class ConferenceManager
 
             lock (room.SyncRoot)
             {
-                var departed = room.Users.Values.ToArray();
-                room.Users.Clear();
+                var departed = room.Table.Values.ToArray();
+                room.Table.Clear();
                 foreach (var user in departed)
-                    user.State = MeetMeUserState.Left;
-                if (_rooms.TryRemove(new KeyValuePair<string, MeetMeRoom>(roomNumber, room)))
+                    user.State = ConferenceUserState.Left;
+                if (_rooms.TryRemove(new KeyValuePair<string, ConferenceRoom>(roomNumber, room)))
                     room.RemovedFromTable = true;
 
                 // The old lifetime is finished before any handler runs, so a handler's join creates a replacement room.
@@ -480,11 +464,11 @@ public class ConferenceManager
     }
 
     // Caller holds _windowGate. Remove the empty lifetime before callbacks can recreate the room.
-    private void RemoveIfEmpty(MeetMeRoom room)
+    private void RemoveIfEmpty(ConferenceRoom room)
     {
         lock (room.SyncRoot)
         {
-            if (room.Users.IsEmpty && _rooms.TryRemove(new KeyValuePair<string, MeetMeRoom>(room.RoomNumber, room)))
+            if (room.Table.IsEmpty && _rooms.TryRemove(new KeyValuePair<string, ConferenceRoom>(room.RoomNumber, room)))
                 room.RemovedFromTable = true;
         }
     }
@@ -588,7 +572,7 @@ public class ConferenceManager
                         : new HashSet<string>(rows.Select(static r => r.Channel), StringComparer.Ordinal);
                     lock (room.SyncRoot)
                     {
-                        foreach (var held in room.Users.Values.Where(user => keep?.Contains(user.Channel) != true).ToArray())
+                        foreach (var held in room.Table.Values.Where(user => keep?.Contains(user.Channel) != true).ToArray())
                         {
                             if (window.IsClosed)
                                 return;
@@ -601,8 +585,8 @@ public class ConferenceManager
                             }
 
                             RecordLeave(room.RoomNumber, held.Channel);
-                            room.Users.TryRemove(new KeyValuePair<string, MeetMeUser>(held.Channel, held));
-                            held.State = MeetMeUserState.Left;
+                            room.Table.TryRemove(new KeyValuePair<string, ConferenceUser>(held.Channel, held));
+                            held.State = ConferenceUserState.Left;
                             held.MarkLeaveNotObserved();
                             RemoveIfEmpty(room);
                             ConferenceManagerLog.UserRemovedBySnapshot(_logger, room.RoomNumber, held.Channel);
@@ -632,22 +616,22 @@ public class ConferenceManager
                     }
 
                     window.Participants.TryGetValue((roomNumber, row.Channel), out state);
-                    var room = _rooms.GetOrAdd(roomNumber, static rn => new MeetMeRoom { RoomNumber = rn });
+                    var room = _rooms.GetOrAdd(roomNumber, static rn => new ConferenceRoom { RoomNumber = rn });
                     lock (room.SyncRoot)
                     {
-                        if (!room.Users.TryGetValue(row.Channel, out var held))
+                        if (!room.Table.TryGetValue(row.Channel, out var held))
                         {
-                            var user = new MeetMeUser
+                            var user = new ConferenceUser
                             {
                                 UserNum = 0,
                                 Channel = row.Channel,
                                 UniqueId = row.UniqueId,
-                                State = MeetMeUserState.Joined,
+                                State = ConferenceUserState.Joined,
                                 Muted = state?.Muted ?? row.Muted ?? false,
                                 Talking = state?.Talking ?? row.Talking ?? false,
                                 JoinMark = ++_changes,
                             };
-                            room.Users[row.Channel] = user;
+                            room.Table[row.Channel] = user;
                             admitted++;
                             continue;
                         }
@@ -666,15 +650,15 @@ public class ConferenceManager
         }
     }
 
-    private bool CanRefreshField(ConferenceSnapshotWindow window, MeetMeRoom room, MeetMeUser user, bool isMuted) =>
+    private bool CanRefreshField(ConferenceSnapshotWindow window, ConferenceRoom room, ConferenceUser user, bool isMuted) =>
         !window.IsClosed && !window.EndedRooms.Contains(room.RoomNumber)
         && IsCurrentParticipant(room, user) && user.JoinMark <= window.Mark
         && (!window.Participants.TryGetValue((room.RoomNumber, user.Channel), out var state)
             || !state.Left && (isMuted ? state.Muted : state.Talking) is null);
 
-    private bool IsCurrentParticipant(MeetMeRoom room, MeetMeUser user) =>
+    private bool IsCurrentParticipant(ConferenceRoom room, ConferenceUser user) =>
         !room.RemovedFromTable && ReferenceEquals(_rooms.GetValueOrDefault(room.RoomNumber), room)
-        && ReferenceEquals(room.Users.GetValueOrDefault(user.Channel), user);
+        && ReferenceEquals(room.Table.GetValueOrDefault(user.Channel), user);
 
     // Caller holds _windowGate. A leave also invalidates an absent key's rows and resets its old-life field reports.
     private void RecordLeave(string roomNumber, string channel)
@@ -698,7 +682,7 @@ public class ConferenceManager
                 lock (room.SyncRoot)
                 {
                     room.RemovedFromTable = true;
-                    foreach (var user in room.Users.Values)
+                    foreach (var user in room.Table.Values)
                         MarkGone(user);
                 }
             }

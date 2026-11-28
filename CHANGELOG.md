@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed — BREAKING: the MeetMe names and the live.server span tag deprecated for 2.12.0 are removed (#683)
+
+The `Verbara.Sdk.Live` surface whose 2.11.0 warning said "Removed in Verbara.Sdk 2.12.0." is gone, and its id
+`VSDK0008` is retired. The [2.12.0 migration guide](docs/guides/migration-2.12.0.md) has the details and the
+replacement for each.
+
+- **`MeetMeManager`, `MeetMeRoom`, `MeetMeUser`, `MeetMeUserState` and `VerbaraServer.MeetMe`** (`VSDK0008`). Use
+  `ConferenceManager`, `ConferenceRoom`, `ConferenceUser`, `ConferenceUserState` and `VerbaraServer.Conferences`,
+  which track the same rooms, participants and events. Code that still names the old types reports `CS0246`.
+- **`ConferenceManager` is sealed.** A class that derives from it reports `CS0509`; a binary built against 2.11.x
+  that derives from it fails to load. Wrap the manager or add extension methods instead. `ConferenceRoom` and
+  `ConferenceUser` are unchanged.
+- **The `live.server` span tag.** Live activities carry `server.id` only. A dashboard or trace query that filters on
+  `live.server` matches nothing until it filters on `server.id`. The meters `live.server.subscriber_faults` and
+  `live.meetme.subscriber_faults` keep their names.
+
+Bytes allocated and time per event of the conference paths are unchanged against 2.11.0. The conference benchmark is
+renamed `ConferenceManagerBenchmark` and runs without a band until it has its own baseline.
+
 ### Fixed: disposing the session reconciliation service cancels the sweep in flight (#681)
 
 `SessionReconciliationService.Dispose()` released its cancellation source without cancelling it, so a sweep that was

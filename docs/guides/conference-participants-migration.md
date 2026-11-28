@@ -8,6 +8,11 @@ ConfBridge sends no user number, so every participant was recorded as user 0: a 
 participants reported one, and the first participant to leave removed the room while the other was
 still talking. 2.9.0 keys participants by channel name.
 
+> **Names from 2.12.0.** 2.11.0 renamed these types to `VerbaraServer.Conferences`, `ConferenceManager`,
+> `ConferenceRoom`, `ConferenceUser` and `ConferenceUserState` (namespace `Verbara.Sdk.Live.Conferences`), and 2.12.0
+> removed the `MeetMe*` names; see [Upgrading to 2.11.0](migration-2.11.0.md#vsdk0008). The prose below keeps the
+> names of the release it describes; the compiled snippets use the current names.
+
 ## What changed
 
 Two public members change shape, in `Verbara.Sdk.Live` (`Verbara.Sdk.Live.MeetMe`):
@@ -74,11 +79,11 @@ server.MeetMe.OnUserLeft("100", 0);
 2.9.0, keyed by channel:
 
 ```csharp
-using Verbara.Sdk.Live.MeetMe;
+using Verbara.Sdk.Live.Conferences;
 
 static void ShowRoom(VerbaraServer server)
 {
-    var room = server.MeetMe.GetRoom("100");
+    var room = server.Conferences.GetRoom("100");
     if (room is null)
     {
         return;
@@ -97,29 +102,29 @@ static void ShowRoom(VerbaraServer server)
 }
 ```
 
-Recording a leave yourself (only if you feed a `MeetMeManager` outside `VerbaraServer`), with the
+Recording a leave yourself (only if you feed a `ConferenceManager` outside `VerbaraServer`), with the
 `Channel` of the `ConfbridgeLeave`:
 
 ```csharp
 using Verbara.Sdk.Ami.Events;
-using Verbara.Sdk.Live.MeetMe;
+using Verbara.Sdk.Live.Conferences;
 
-static void Apply(MeetMeManager meetMe, ConfbridgeLeaveEvent leave)
+static void Apply(ConferenceManager conferences, ConfbridgeLeaveEvent leave)
 {
-    meetMe.OnUserLeft(leave.Conference ?? "", leave.Channel ?? "");
+    conferences.OnUserLeft(leave.Conference ?? "", leave.Channel ?? "");
 }
 ```
 
 Counting with the events instead of the table:
 
 ```csharp
-using Verbara.Sdk.Live.MeetMe;
+using Verbara.Sdk.Live.Conferences;
 
 static void Watch(VerbaraServer server)
 {
-    server.MeetMe.UserJoined += (room, user) =>
+    server.Conferences.UserJoined += (room, user) =>
         Console.WriteLine($"{user.Channel} joined {room.RoomNumber}; {room.UserCount} now");
-    server.MeetMe.UserLeft += (room, user) =>
+    server.Conferences.UserLeft += (room, user) =>
         Console.WriteLine($"{user.Channel} left {room.RoomNumber}; {room.UserCount} remain");
 }
 ```
@@ -207,9 +212,9 @@ participant or the room, `No active conferences.` included, and `false` when Liv
 Consumers cannot set it.
 
 ```csharp
-using Verbara.Sdk.Live.MeetMe;
+using Verbara.Sdk.Live.Conferences;
 
-static void WatchLeaves(MeetMeManager conferences)
+static void WatchLeaves(ConferenceManager conferences)
 {
     conferences.UserLeft += (room, user) =>
     {

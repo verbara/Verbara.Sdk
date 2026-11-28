@@ -207,11 +207,13 @@ Declared in `unbanded` today, on purpose:
   `sources._turn_detection_note`.
 - `AsyncEventPumpBenchmark.EnqueueAndConsume1000Events` — bimodal bytes, `_bytes_note`.
 - `AsyncEventPumpBenchmark.Refuse9000Of10000Events` — not yet read on the hosted runner.
+- `ConferenceManagerBenchmark`, all four rows — renamed in 2.12.0 (it was `MeetMeManagerBenchmark`);
+  banded from its own runs in its own PR.
 
 Banded on bytes only, time not yet banded: `ChannelManagerBenchmark.Update1000ChannelStates_OneSubscriber`
 (`_channel_manager_one_subscriber_note`), `ChannelManagerBenchmark.Create1000Channels_TwoLegCalls`,
-the two deterministic `AsyncEventPumpBenchmark` rows and every `QueueManagerBenchmark` and
-`MeetMeManagerBenchmark` row. Their time bands come from two weekly runs.
+the two deterministic `AsyncEventPumpBenchmark` rows and every `QueueManagerBenchmark` row. Their
+time bands come from two weekly runs.
 
 ## Removing a band without removing the benchmark
 
@@ -422,7 +424,7 @@ five runs do not start and the flip rule below applies.
   mean square of ln g, plus the two next by their largest single |ln g|):
   `ObserverDispatchBenchmark.Dispatch_10Observers`,
   `ChannelManagerBenchmark.LookupByUniqueId`,
-  `MeetMeManagerBenchmark.Mute_NoSubscriber`,
+  `MeetMeManagerBenchmark.Mute_NoSubscriber` (renamed `ConferenceManagerBenchmark` in 2.12.0),
   `ChannelManagerBenchmark.Create1000Channels`,
   `AmiProtocolReaderBenchmark.ParseResponse`,
   `AmiProtocolReaderBenchmark.ParseSingleEvent` and

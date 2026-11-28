@@ -539,6 +539,81 @@ public sealed class ConferenceManagerTests
         _sut.GetRoom("200").Should().BeNull();
     }
 
+    [Fact]
+    public void Users_ShouldFollowTheTable_WhenAHeldViewOutlivesAJoinAndALeave()
+    {
+        _sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA);
+        var view = _sut.GetRoom(Room)!.Users;
+
+        _sut.OnUserJoined(Room, 0, ChannelB, UniqueIdB);
+        _sut.OnUserLeft(Room, ChannelA);
+
+        view.Keys.Should().Equal(ChannelB);
+        view.Count.Should().Be(1);
+        view.ContainsKey(ChannelA).Should().BeFalse();
+        view.TryGetValue(ChannelB, out var user).Should().BeTrue();
+        user.Should().BeSameAs(_sut.GetRoom(Room)!.Users[ChannelB]);
+        view.Values.Should().ContainSingle().Which.Should().BeSameAs(user);
+        view.Should().ContainSingle().Which.Key.Should().Be(ChannelB);
+        view.TryGetValue(ChannelA, out var missing).Should().BeFalse();
+        missing.Should().BeNull();
+    }
+
+    [Fact]
+    public void UserStateChanged_ShouldNotRaiseARemovedHandler_WhenItWasRemoved()
+    {
+        var raised = 0;
+        var kept = 0;
+        Action<ConferenceRoom, ConferenceUser> removed = (_, _) => raised++;
+        _sut.UserStateChanged += removed;
+        _sut.UserStateChanged += (_, _) => kept++;
+        _sut.UserStateChanged -= removed;
+        _sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA);
+
+        _sut.OnUserMuted(Room, ChannelA, true);
+
+        raised.Should().Be(0);
+        kept.Should().Be(1);
+    }
+
+    [Fact]
+    public void UserLeft_ShouldRaiseHandlersInSubscriptionOrder_WhenTheSecondOfThreeThrows()
+    {
+        var order = new List<string>();
+        _sut.UserLeft += (_, _) => order.Add("first");
+        _sut.UserLeft += (_, _) =>
+        {
+            order.Add("second");
+            throw new InvalidOperationException("a failing subscriber");
+        };
+        _sut.UserLeft += (_, _) => order.Add("third");
+        _sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA);
+
+        var thrown = Record.Exception(() => _sut.OnUserLeft(Room, ChannelA));
+
+        thrown.Should().BeNull();
+        order.Should().Equal("first", "second", "third");
+    }
+
+    [Fact]
+    public void UserLeft_ShouldIsolateEachHandlerOfAMulticast_WhenItIsSubscribedAsOneDelegate()
+    {
+        var order = new List<string>();
+        Action<ConferenceRoom, ConferenceUser> first = (_, _) =>
+        {
+            order.Add("first");
+            throw new InvalidOperationException("a failing subscriber");
+        };
+        Action<ConferenceRoom, ConferenceUser> second = (_, _) => order.Add("second");
+        _sut.UserLeft += first + second;
+        _sut.OnUserJoined(Room, 0, ChannelA, UniqueIdA);
+
+        var thrown = Record.Exception(() => _sut.OnUserLeft(Room, ChannelA));
+
+        thrown.Should().BeNull();
+        order.Should().Equal("first", "second");
+    }
+
     private sealed class CapturingLogger : ILogger
     {
         private readonly List<(LogLevel Level, string Message)> _entries = [];

@@ -10,6 +10,7 @@ using Verbara.Sdk.Ami.Internal;
 using Verbara.Sdk.Enums;
 using Verbara.Sdk.Live.Agents;
 using Verbara.Sdk.Live.Channels;
+using Verbara.Sdk.Live.Conferences;
 using Verbara.Sdk.Live.Server;
 using FluentAssertions;
 using FluentAssertions.Execution;
@@ -376,7 +377,7 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
     // ==========================================================================
 
     [Fact]
-    public async Task EventObserver_ShouldRouteConfbridgeJoinEvent_ToMeetMeManager()
+    public async Task EventObserver_ShouldRouteConfbridgeJoinEvent_ToConferenceManager()
     {
         await StartAndGetObserverAsync();
 
@@ -394,7 +395,7 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
         });
 
         var room = _sut.Conferences.GetRoom("300");
-        room.Should().NotBeNull("a ConfBridge join opens the room in the MeetMe manager");
+        room.Should().NotBeNull("a ConfBridge join opens the room in the conference manager");
         room!.UserCount.Should().Be(2, "two channels joined one conference, both with user number 0");
         room.Users["PJSIP/2000-001"].UniqueId.Should().Be("1792103773.1", "the arm passes the join's Uniqueid");
     }
@@ -404,7 +405,24 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
     // ==========================================================================
 
     [Fact]
-    public async Task EventObserver_ShouldRouteConfbridgeLeaveEvent_ToMeetMeManager()
+    public async Task EventObserver_ShouldRaiseUserJoinedWithTheHeldRoomAndParticipant_WhenAConfbridgeJoinArrives()
+    {
+        var joined = new List<(ConferenceRoom Room, ConferenceUser User)>();
+        var conferences = _sut.Conferences;
+        _sut.Conferences.Should().BeSameAs(conferences, "the server holds one conference table");
+        _sut.Conferences.UserJoined += (room, user) => joined.Add((room, user));
+        await StartAndGetObserverAsync();
+
+        _observer!.OnNext(new ConfbridgeJoinEvent { Conference = "100", Channel = "PJSIP/2000-001" });
+
+        joined.Should().ContainSingle("one join raises UserJoined once");
+        var room = _sut.Conferences.GetRoom("100");
+        joined[0].Room.Should().BeSameAs(room);
+        joined[0].User.Should().BeSameAs(room!.Users["PJSIP/2000-001"]);
+    }
+
+    [Fact]
+    public async Task EventObserver_ShouldRouteConfbridgeLeaveEvent_ToConferenceManager()
     {
         await StartAndGetObserverAsync();
 
@@ -436,7 +454,7 @@ public sealed class VerbaraServerEventRoutingTests : IAsyncLifetime
     // ==========================================================================
 
     [Fact]
-    public async Task EventObserver_ShouldRouteConfbridgeEndEvent_ToMeetMeManager()
+    public async Task EventObserver_ShouldRouteConfbridgeEndEvent_ToConferenceManager()
     {
         var left = new List<string>();
         _sut.Conferences.UserLeft += (_, user) => left.Add(user.Channel);
