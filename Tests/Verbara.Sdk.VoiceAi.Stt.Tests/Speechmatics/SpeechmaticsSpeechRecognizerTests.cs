@@ -476,7 +476,8 @@ public class SpeechmaticsSpeechRecognizerTests : IAsyncLifetime
     [Fact]
     public async Task StreamAsync_ShouldThrowHandshakeFailure_WhenNothingAcceptsTheUpgrade()
     {
-        var recognizer = BuildRecognizer(o => o.BaseUri = $"ws://127.0.0.1:{ClosedPort.Reserve()}/v2");
+        using var closed = ClosedPort.Bind();
+        var recognizer = BuildRecognizer(o => o.BaseUri = $"ws://127.0.0.1:{closed.Port}/v2");
 
         var act = async () =>
             await recognizer.StreamAsync(SingleFrame(), AudioFormat.Slin16Mono8kHz).ToListAsync();

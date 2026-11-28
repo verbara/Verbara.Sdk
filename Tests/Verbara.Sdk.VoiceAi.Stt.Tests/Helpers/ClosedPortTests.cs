@@ -19,17 +19,53 @@ namespace Verbara.Sdk.VoiceAi.Stt.Tests.Helpers;
 public sealed class ClosedPortTests
 {
     [Fact]
-    public void Reserve_ShouldKeepThePortFromACompetitor_WhileTheTestStillNeedsIt()
+    public void Bind_ShouldKeepThePortFromACompetitor_WhileTheTestStillNeedsIt()
     {
         // Arrange
-        var port = ClosedPort.Reserve();
+        using var closed = ClosedPort.Bind();
         using var competitor = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 
         // Act
-        var fault = Record.Exception(() => competitor.Bind(new IPEndPoint(IPAddress.Loopback, port)));
+        var fault = Record.Exception(() => competitor.Bind(new IPEndPoint(IPAddress.Loopback, closed.Port)));
 
         // Assert
         fault.Should().BeOfType<SocketException>("the port must still be owned by the test")
             .Which.SocketErrorCode.Should().Be(SocketError.AddressAlreadyInUse);
+    }
+
+    [Fact]
+    public void Bind_ShouldKeepThePortFromACompetitor_WhenTheCompetitorAsksForAddressReuse()
+    {
+        // Arrange
+        using var closed = ClosedPort.Bind();
+        using var competitor = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        competitor.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+
+        // Act
+        var fault = Record.Exception(() => competitor.Bind(new IPEndPoint(IPAddress.Loopback, closed.Port)));
+
+        // Assert
+        fault.Should().BeOfType<SocketException>("address reuse must not let a second socket share the port")
+            .Which.SocketErrorCode.Should().Be(SocketError.AddressAlreadyInUse);
+    }
+
+    [Fact]
+    public async Task Bind_ShouldRefuseEveryConnection_WhenDialledRepeatedly()
+    {
+        // Arrange
+        using var closed = ClosedPort.Bind();
+        var refusals = new List<SocketError?>();
+
+        // Act: more dials than any listen backlog would hold, so a port that queued them would show.
+        for (var i = 0; i < 8; i++)
+        {
+            using var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            var fault = await Record.ExceptionAsync(
+                () => client.ConnectAsync(new IPEndPoint(IPAddress.Loopback, closed.Port)));
+            refusals.Add((fault as SocketException)?.SocketErrorCode);
+        }
+
+        // Assert
+        refusals.Should().HaveCount(8).And.OnlyContain(e => e == SocketError.ConnectionRefused);
     }
 }
