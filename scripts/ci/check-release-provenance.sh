@@ -3,9 +3,10 @@
 # tagged commit prove it was built green?
 #
 # THE RULE. Every COMPLETED check run on the commit concludes success, skipped or neutral, and at
-# least one exists — except the check runs of two workflows that say nothing about whether the
-# commit was built, which are ignored: `.github/workflows/release-hygiene.yml`, and Dependabot's
-# update runs (`dynamic/dependabot/dependabot-updates`). A run still in flight is evidence neither
+# least one exists — except the check runs of three workflows that say nothing about whether the
+# commit was built, which are ignored: `.github/workflows/release-hygiene.yml`,
+# `.github/workflows/perf-regression.yml`, and Dependabot's update runs
+# (`dynamic/dependabot/dependabot-updates`). A run still in flight is evidence neither
 # way: it reports `conclusion: null`, and publish.yml's own job is always one of them.
 #
 # WHY RELEASE-HYGIENE. release-hygiene.yml runs on `push: main`, and a release commit reaches main by
@@ -18,6 +19,14 @@
 # gate with "1 failure, 14 success", naming nothing, and published only after both runs were re-run
 # by hand.
 #
+# WHY PERF-REGRESSION. perf-regression.yml judges the benchmarks against a baseline, not whether the
+# commit was built, and it triggers only on `schedule` and `workflow_dispatch` — never `pull_request`
+# or `merge_group` — so none of its runs is part of how a commit reaches main, and none is evidence
+# that it did. A scheduled run lands on whatever commit is main's HEAD, and a run dispatched by hand
+# on a release candidate lands on exactly the commit about to be tagged: on 2026-11-28 one such run,
+# red and accepted by the owner, refused the v2.11.0 publish until it was deleted. The trigger
+# premise is pinned by scripts/tests/test_release_provenance.sh, which fails if another trigger is added.
+#
 # WHY DEPENDABOT. Dependabot's scheduled version-update jobs run as dynamic workflows that attach to
 # whatever commit is the HEAD of main when they start, and they often end `cancelled`. They judge the
 # dependency graph against the registries, not this commit's build — but counted, a cancelled one
@@ -28,7 +37,7 @@
 # BY WORKFLOW PATH, NEVER BY NAME. Check-run names are not unique — on the 2.5.1 commit, `Analyze (C#)`
 # and `Docs-only gate (CodeQL)` each appear in two check suites — and any workflow can call a job
 # `Publish Liveness`. So a check run is ignored only when its check suite belongs to a workflow run
-# whose `path` is exactly one of the two above: check run -> check_suite.id -> the workflow run with
+# whose `path` is exactly one of the three above: check run -> check_suite.id -> the workflow run with
 # that check_suite_id -> path. A suite with no workflow run (a third-party app's check) is NOT ignored,
 # and neither is a suite that more than one path claims.
 #
@@ -44,7 +53,7 @@
 # and in this shape a page boundary leaves no trace. A page document or a single array is rejected as
 # the wrong shape rather than guessed at.
 #
-# NOT CHECKED: that any particular workflow ran — one green completed check run that neither ignored
+# NOT CHECKED: that any particular workflow ran — one green completed check run that no ignored
 # workflow produced is enough evidence, including one from an app with no workflow run at all. Nor a
 # failure that is being re-run: the API's latest attempt replaces it as soon as the re-run starts, and
 # a run in flight is not evidence. See the ADR-0055 addendum (2026-09-12).
@@ -54,6 +63,7 @@
 set -euo pipefail
 
 HYGIENE_WORKFLOW='.github/workflows/release-hygiene.yml'
+PERF_WORKFLOW='.github/workflows/perf-regression.yml'
 DEPENDABOT_WORKFLOW='dynamic/dependabot/dependabot-updates'
 
 cannot_tell() { # cannot_tell <reason>
@@ -84,7 +94,7 @@ JQ_DEFS='
 sha="$1"; checks_file="$2"; runs_file="$3"
 [ -n "$sha" ] || cannot_tell "no commit sha was given"
 command -v jq >/dev/null 2>&1 || cannot_tell "jq is not on PATH"
-ignored_paths="$(jq -cn --arg h "$HYGIENE_WORKFLOW" --arg d "$DEPENDABOT_WORKFLOW" '[$h, $d]')" \
+ignored_paths="$(jq -cn --arg h "$HYGIENE_WORKFLOW" --arg p "$PERF_WORKFLOW" --arg d "$DEPENDABOT_WORKFLOW" '[$h, $p, $d]')" \
   || cannot_tell "the ignored workflow paths could not be assembled"
 
 # validate <what> <file> <predicate> <gh-jq-filter> — the file is readable, every value in it parses,
@@ -111,7 +121,7 @@ validate "workflow runs" "$runs_file" is_workflow_run '.workflow_runs[]'
 
 # Classify every check run by its own check suite. The workflow paths are looked up per check run, so
 # a name shared by two suites is judged twice, once per suite — never once for both. A check run is
-# ignored only when exactly one path owns its suite and that path is one of the ignored two.
+# ignored only when exactly one path owns its suite and that path is one of the ignored three.
 report="$(jq -cn --slurpfile runs "$runs_file" --argjson ignored "$ignored_paths" "$JQ_DEFS"'
   [ inputs as $c
     | ([ $runs[] | select(.check_suite_id == $c.check_suite.id) | .path ] | unique) as $paths
@@ -128,7 +138,7 @@ report="$(jq -cn --slurpfile runs "$runs_file" --argjson ignored "$ignored_paths
                 else "green" end)
 ' "$checks_file")" || cannot_tell "the check runs could not be evaluated"
 
-printf '%s' "$report" | jq -r --arg sha "$sha" --arg hygiene "$HYGIENE_WORKFLOW" "$JQ_DEFS"'
+printf '%s' "$report" | jq -r --arg sha "$sha" --arg hygiene "$HYGIENE_WORKFLOW" --arg perf "$PERF_WORKFLOW" "$JQ_DEFS"'
   def where:
     if (.paths | length) == 1 then .paths[0]
     elif (.paths | length) == 0 then "no workflow run" + (if .app then ", reported by app \(.app)" else "" end)
@@ -137,6 +147,8 @@ printf '%s' "$report" | jq -r --arg sha "$sha" --arg hygiene "$HYGIENE_WORKFLOW"
   def why($s):
     if . == $hygiene
     then "they judge the repository against its tags (a release not cut, a baseline not moved), not whether \($s) was built"
+    elif . == $perf
+    then "they judge performance against a baseline and run only on a schedule or by hand, never on the way to main, so they say nothing about whether \($s) was built"
     else "Dependabot update runs attach to whatever commit is the HEAD of main and judge dependencies, not whether \($s) was built"
     end;
   ($sha | cmd) as $s
