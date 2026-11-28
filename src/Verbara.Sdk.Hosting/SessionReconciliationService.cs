@@ -160,6 +160,10 @@ internal sealed partial class SessionReconciliationService : IHostedService, IDi
         _timer?.Dispose();
     }
 
+    /// <summary>
+    /// Cancels the sweep in flight, if any, without waiting for it, and releases the loop's source and timer. A second
+    /// disposal, or one that comes after a stop took the source, releases nothing twice.
+    /// </summary>
     public void Dispose()
     {
         CancellationTokenSource? cts;
@@ -173,7 +177,14 @@ internal sealed partial class SessionReconciliationService : IHostedService, IDi
             _cts = null;
         }
 
-        cts?.Dispose();
+        // Cancel before releasing: a sweep in flight is told to stop, instead of being left running on a token
+        // nothing can cancel any more. The source taken here is this disposal's alone, so no stop cancels it too.
+        if (cts is not null)
+        {
+            cts.Cancel();
+            cts.Dispose();
+        }
+
         _timer?.Dispose();
     }
 
