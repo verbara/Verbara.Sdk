@@ -87,12 +87,42 @@ public sealed class DocSnippetCompilationTests
     public void LeaveNotObserved_ShouldNotCompile_WhenAConsumerAssignsItOnAParticipant()
     {
         var errors = ConsumerCompilationErrors("""
-            using Verbara.Sdk.Live.MeetMe;
+            using Verbara.Sdk.Live.Conferences;
 
-            new MeetMeUser().LeaveNotObserved = true;
+            ConferenceUser user = null!;
+            user.LeaveNotObserved = true;
             """);
 
         errors.Should().Equal("CS0200");
+    }
+
+    [Fact]
+    public void ConferenceManager_ShouldNotCompile_WhenAConsumerDerivesFromIt()
+    {
+        var errors = ConsumerCompilationErrors("""
+            using Verbara.Sdk.Live.Conferences;
+
+            _ = typeof(CustomConferences);
+
+            sealed class CustomConferences : ConferenceManager;
+            """);
+
+        errors.Should().Equal("CS0509");
+    }
+
+    [Fact]
+    public void FormerConferenceNames_ShouldNotCompile_WhenAConsumerStillNamesThem()
+    {
+        var errors = ConsumerCompilationErrors("""
+            using Verbara.Sdk.Live.Server;
+
+            VerbaraServer server = null!;
+            _ = server.MeetMe;
+            Verbara.Sdk.Live.MeetMe.MeetMeManager manager = null!;
+            Verbara.Sdk.Live.MeetMeUserState state = default;
+            """);
+
+        errors.Should().Equal("CS1061", "CS0234", "CS0234");
     }
 
     [Fact]

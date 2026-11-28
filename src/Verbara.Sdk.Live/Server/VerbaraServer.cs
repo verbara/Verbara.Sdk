@@ -16,7 +16,6 @@ using Verbara.Sdk.Live.Bridges;
 using Verbara.Sdk.Live.Channels;
 using Verbara.Sdk.Live.Diagnostics;
 using Verbara.Sdk.Live.Conferences;
-using Verbara.Sdk.Live.MeetMe;
 using Verbara.Sdk.Live.Queues;
 using Microsoft.Extensions.Logging;
 
@@ -206,13 +205,6 @@ public sealed class VerbaraServer : IVerbaraServer
     /// on each load, Asterisk's conference listing.
     /// </summary>
     public ConferenceManager Conferences { get; }
-
-    /// <summary>The former name of <see cref="Conferences"/>: the same instance, under its former type.</summary>
-    [Obsolete(
-        "Renamed to Conferences, which returns this same manager as a ConferenceManager. Removed in Verbara.Sdk 2.12.0.",
-        DiagnosticId = "VSDK0008",
-        UrlFormat = "https://github.com/verbara/Verbara.Sdk/blob/main/docs/guides/migration-2.11.0.md#vsdk0008")]
-    public MeetMeManager MeetMe { get; }
     public BridgeManager Bridges { get; }
 
     /// <summary>Fired when the AMI connection is lost or completed.</summary>
@@ -725,11 +717,7 @@ public sealed class VerbaraServer : IVerbaraServer
             Channels.SourceEventReader = () => sourceConnection.DispatchingEvent;
         Queues = new QueueManager(logger);
         Agents = new AgentManager(logger) { Memberships = Queues.AgentMembershipsOf };
-#pragma warning disable VSDK0008 // One manager under both names until 2.12.0 removes MeetMeManager.
-        var conferences = new MeetMeManager(logger);
-        MeetMe = conferences;
-#pragma warning restore VSDK0008
-        Conferences = conferences;
+        Conferences = new ConferenceManager(logger);
         Bridges = new BridgeManager(logger);
         _instanceMeter = new Meter("Verbara.Sdk.Live", "1.0.0");
 

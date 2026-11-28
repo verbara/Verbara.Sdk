@@ -49,7 +49,7 @@ public sealed class ConferenceParticipantStateTests : FunctionalTestBase
     }
 
     [Fact]
-    public async Task MeetMe_ShouldReflectStartMutedJoinAndManagerMuteAndUnmute_WhenTwoCallersJoinOneConfBridge()
+    public async Task Conferences_ShouldReflectStartMutedJoinAndManagerMuteAndUnmute_WhenTwoCallersJoinOneConfBridge()
     {
         var conference = $"test-conf-state-{Guid.NewGuid():N}";
 

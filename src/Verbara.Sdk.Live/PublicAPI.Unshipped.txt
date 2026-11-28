@@ -1,1 +1,39 @@
 #nullable enable
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeManager
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeManager.Clear() -> void
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeManager.GetRoom(string! roomNumber) -> Verbara.Sdk.Live.MeetMe.MeetMeRoom?
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeManager.MeetMeManager(Microsoft.Extensions.Logging.ILogger! logger) -> void
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeManager.OnConferenceEnded(string! roomNumber) -> void
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeManager.OnUserJoined(string! roomNumber, int userNum, string! channel, string? uniqueId) -> void
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeManager.OnUserJoined(string! roomNumber, int userNum, string! channel) -> void
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeManager.OnUserLeft(string! roomNumber, string! channel) -> void
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeManager.Rooms.get -> System.Collections.Generic.IReadOnlyCollection<Verbara.Sdk.Live.MeetMe.MeetMeRoom!>!
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeManager.UserJoined -> System.Action<Verbara.Sdk.Live.MeetMe.MeetMeRoom!, Verbara.Sdk.Live.MeetMe.MeetMeUser!>?
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeManager.UserLeft -> System.Action<Verbara.Sdk.Live.MeetMe.MeetMeRoom!, Verbara.Sdk.Live.MeetMe.MeetMeUser!>?
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeManager.UserStateChanged -> System.Action<Verbara.Sdk.Live.MeetMe.MeetMeRoom!, Verbara.Sdk.Live.MeetMe.MeetMeUser!>?
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeRoom
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeRoom.MeetMeRoom() -> void
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeRoom.RoomNumber.get -> string!
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeRoom.RoomNumber.init -> void
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeRoom.UserCount.get -> int
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeRoom.Users.get -> System.Collections.Concurrent.ConcurrentDictionary<string!, Verbara.Sdk.Live.MeetMe.MeetMeUser!>!
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeUser
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeUser.Channel.get -> string!
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeUser.Channel.init -> void
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeUser.LeaveNotObserved.get -> bool
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeUser.MeetMeUser() -> void
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeUser.Muted.get -> bool
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeUser.Muted.set -> void
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeUser.State.get -> Verbara.Sdk.Live.MeetMeUserState
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeUser.State.set -> void
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeUser.Talking.get -> bool
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeUser.Talking.set -> void
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeUser.UniqueId.get -> string?
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeUser.UniqueId.init -> void
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeUser.UserNum.get -> int
+*REMOVED*Verbara.Sdk.Live.MeetMe.MeetMeUser.UserNum.init -> void
+*REMOVED*Verbara.Sdk.Live.MeetMeUserState
+*REMOVED*Verbara.Sdk.Live.MeetMeUserState.Joined = 0 -> Verbara.Sdk.Live.MeetMeUserState
+*REMOVED*Verbara.Sdk.Live.MeetMeUserState.Left = 1 -> Verbara.Sdk.Live.MeetMeUserState
+*REMOVED*Verbara.Sdk.Live.MeetMeUserState.Talking = 2 -> Verbara.Sdk.Live.MeetMeUserState
+*REMOVED*Verbara.Sdk.Live.Server.VerbaraServer.MeetMe.get -> Verbara.Sdk.Live.MeetMe.MeetMeManager!

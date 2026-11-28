@@ -72,10 +72,11 @@ public static class LiveMetrics
             "Queue subscriber failures (a queue event handler threw); delivery goes on");
 
     /// <summary>
-    /// Conference subscriber failures: a handler of a <c>MeetMeManager</c> event that threw, one per failure. Each is
-    /// also logged at Warning; the later subscribers and the table's work go on.
+    /// Conference subscriber failures: a handler of a <c>ConferenceManager</c> event that threw, one per failure. Each
+    /// is also logged at Warning; the later subscribers and the table's work go on. The instrument keeps its published
+    /// name.
     /// </summary>
-    internal static readonly Counter<long> MeetMeSubscriberFaults =
+    internal static readonly Counter<long> ConferenceSubscriberFaults =
         Meter.CreateCounter<long>("live.meetme.subscriber_faults", "faults",
             "Conference subscriber failures (a conference event handler threw); delivery goes on");
 

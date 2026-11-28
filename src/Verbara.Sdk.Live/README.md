@@ -66,8 +66,8 @@ change; a throwing `AgentStateChanged` subscriber no longer skips the `AgentConn
 `live.server.subscriber_faults`; the other subscribers are still told.
 
 Conference rooms are `server.Conferences` (`ConferenceManager`, `ConferenceRoom`, `ConferenceUser`) from 2.11.0. The
-former `server.MeetMe` and `MeetMe*` types are the same objects under deprecated names (`VSDK0008`) until 2.12.0; see the
-[2.11.0 migration guide](../../docs/guides/migration-2.11.0.md#the-conference-types-are-named-for-what-they-track).
+former names, deprecated in 2.11.0 (`VSDK0008`), were removed in 2.12.0, and `ConferenceManager` is sealed from 2.12.0;
+see the [2.11.0 migration guide](../../docs/guides/migration-2.11.0.md#the-conference-types-are-named-for-what-they-track).
 
 ## Reconciling the channels
 
